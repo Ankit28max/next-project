@@ -95,3 +95,13 @@ Still to do: README, docs/REPORT.md, docs/VIVA.md, docs/DEMO_SCRIPT.md, Lighthou
 - The Gemini call end to end, and the default model name `gemini-2.5-flash` (no key was available; if the name is retired the app falls back to rules and says so).
 - Lighthouse against the deployed URL.
 - The GitHub Actions workflow has never run (not pushed, see above).
+
+## Sun 23:00-23:40 - Gemini key added, vision model verified
+
+- The user had pasted the key into the tracked `.env.example`. It was never committed. Moved it to the git-ignored `.env.local` and restored `.env.example`.
+- **Default model was wrong** (flagged earlier as unverified): `gemini-2.5-flash` answers 404 "no longer available to new users". The app fell back to rules and recorded the reason, as designed. Timed the real request against current models: `gemini-3.8-flash` and `gemini-3.5-flash` exceeded the 10 s timeout; `gemini-3.5-flash-lite` answers in 1-2.5 s. Default is now `gemini-3.5-flash-lite`.
+- **Verified:** real vision calls return valid JSON that passes the zod schema; `/api/health` reports "vision model with rules fallback"; fallback on 404, timeout and 429 each recorded with the reason.
+- **Eval with vision (33 cases):** category 33/33; duplicates 5/5 and 5/5; suspicious flag recall 5/5, precision 5/26. The low precision is because the synthetic drawings are (correctly) described as not real photos. Reported as measured in README and REPORT; no thresholds were changed.
+- Free tier is about 15 requests/minute: `scripts/eval.ts` now pauses 5 s between vision calls. An unpaced run got 429 after 14 calls.
+- Demo implication recorded in DEMO_SCRIPT: use real phone photos with the vision model on, or record in rules-only mode.
+- Still unverified: everything on Vercel/Neon/Blob; vision fraud precision on real photographs.

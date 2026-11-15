@@ -104,7 +104,7 @@ To run a production build locally, copy the same file to `.env.production.local`
 | `DIRECT_URL` | yes | Connection used by `prisma migrate`. On Neon: the **direct** connection string. Locally: same as `DATABASE_URL` |
 | `JWT_SECRET` | yes | Signs session cookies. At least 32 characters. The server refuses to start without it; there is no default |
 | `GEMINI_API_KEY` | no | Google AI Studio key. Without it the app runs on keyword rules only, and says so in the UI |
-| `GEMINI_MODEL` | no | Vision model name (default `gemini-2.5-flash`) |
+| `GEMINI_MODEL` | no | Vision model name (default `gemini-3.5-flash-lite`) |
 | `BLOB_READ_WRITE_TOKEN` | on Vercel | Set automatically when a Vercel Blob store is linked. Without it, photos go to the local `.uploads/` folder (development only) |
 | `SEED_ADMIN_PASSWORD`, `SEED_OFFICER_PASSWORD`, `SEED_CITIZEN_PASSWORD` | for `seed:prod` | Passwords for the accounts created by the production seed (10+ characters) |
 | `GEOCODER_CONTACT` | no | Contact address sent in the User-Agent to OpenStreetMap Nominatim, as its usage policy asks |
@@ -195,23 +195,25 @@ Everything below runs on the server. The numbers come from one file: `src/lib/ai
 
 ## Measured results
 
-From `npm run eval` on the 33 labelled cases in `eval/dataset.ts` (English and Hinglish; 5 duplicate pairs; 5 suspicious cases; **synthetic photos**). Run on 15 Nov 2026, **keyword rules only** (no Gemini key was available).
+From `npm run eval` on the 33 labelled cases in `eval/dataset.ts` (English and Hinglish; 5 duplicate pairs; 5 suspicious cases; **synthetic photos**). Run on 15 Nov 2026, twice: keyword rules only, and with the vision model `gemini-3.5-flash-lite`.
 
-| Measure | Result |
-|---|---|
-| Category accuracy (rules) | 31 / 33 = 93.9% |
-| Duplicate detection precision | 5 / 5 = 100% |
-| Duplicate detection recall | 5 / 5 = 100% |
-| Suspicious flag precision (risk ≥ 30) | 3 / 5 = 60% |
-| Suspicious flag recall | 3 / 5 = 60% |
+| Measure | Rules only | With vision model |
+|---|---|---|
+| Category accuracy | 31 / 33 = 93.9% | 33 / 33 = 100% |
+| Duplicate detection precision | 5 / 5 = 100% | 5 / 5 = 100% |
+| Duplicate detection recall | 5 / 5 = 100% | 5 / 5 = 100% |
+| Suspicious flag precision (risk ≥ 30) | 3 / 5 = 60% | 5 / 26 = 19.2% |
+| Suspicious flag recall | 3 / 5 = 60% | 5 / 5 = 100% |
 
-What went wrong, case by case:
+How to read this:
 
-- Category: "Bikes keep skidding at the turn" has no road keyword (filed as Other). A Hinglish drain complaint containing *ganda pani* was filed as Water Supply.
-- Two false alarms: a neighbour who forwarded the same photo of a real burst pipe, and a citizen who re-sent their own unresolved streetlight complaint.
-- Two misses: a screenshot used as a "photo", and a garbage photo attached to a streetlight complaint. Rules cannot see photo content; these need the vision model.
+- **Category.** Rules missed two cases: "Bikes keep skidding at the turn" (no road keyword, filed as Other) and a Hinglish drain complaint containing *ganda pani* (filed as Water Supply). The vision model got both.
+- **Suspicious flag, rules only.** Two false alarms (a neighbour who forwarded the same photo of a real burst pipe; a citizen who re-sent their own unresolved complaint) and two misses (a screenshot used as a "photo"; a garbage photo on a streetlight complaint), because rules cannot see photo content.
+- **Suspicious flag, with the vision model.** It caught all five, but it also flagged 21 genuine cases. The reason is our test data, not the complaints: the evaluation photos are simple drawings, and the model correctly reports that they are "not a real photo" or "look like a graphic". **So the vision model's fraud precision cannot be measured with this set.** It needs real photographs, which we did not have permission to collect. The 19.2% is what happened on this set and should not be read as real-world precision in either direction.
 
-**Caveat:** this is a small set written by the team, with synthetic drawings instead of real photos. The numbers describe this set only. Vision-model results are **not measured yet**.
+**Caveat:** a small set written by the team, with synthetic drawings instead of real photos. The numbers describe this set only.
+
+**Vision model notes:** the free Gemini tier allows about 15 requests per minute; above that the API answers 429 and the app falls back to rules (recorded per complaint). During testing the API was also sometimes slow enough to hit our 10-second timeout, with the same fallback.
 
 ## Tests
 

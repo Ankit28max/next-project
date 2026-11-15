@@ -147,17 +147,19 @@ One accent colour and neutral greys defined in `tailwind.config.ts`; status is a
 
 ### 7.1 Analysis quality
 
-`npm run eval`, 15 Nov 2026, 33 labelled cases, synthetic photos, **keyword rules only** (no vision-model key was available).
+`npm run eval`, 15 Nov 2026, 33 labelled cases with synthetic photos. Run twice: keyword rules only, and with the vision model `gemini-3.5-flash-lite`.
 
-| Measure | Result |
-|---|---|
-| Category accuracy | 31 / 33 = 93.9% |
-| Duplicate precision / recall | 5 / 5 = 100% / 5 / 5 = 100% |
-| Suspicious-flag precision / recall | 3 / 5 = 60% / 3 / 5 = 60% |
+| Measure | Rules only | With vision model |
+|---|---|---|
+| Category accuracy | 31 / 33 = 93.9% | 33 / 33 = 100% |
+| Duplicate precision | 5 / 5 = 100% | 5 / 5 = 100% |
+| Duplicate recall | 5 / 5 = 100% | 5 / 5 = 100% |
+| Suspicious-flag precision | 3 / 5 = 60% | 5 / 26 = 19.2% |
+| Suspicious-flag recall | 3 / 5 = 60% | 5 / 5 = 100% |
 
-The two misses in the suspicious set (a screenshot, and a photo unrelated to the text) cannot be detected without looking at the photo content. Vision-model results were not measured.
-
-The set is small, was written by the team, and uses drawings instead of real photos. These numbers do not predict real-world performance.
+- Rules alone miss the two suspicious cases that require looking at the photo (a screenshot; a photo unrelated to the text). The vision model catches both.
+- With the vision model, 21 genuine cases were also flagged. The evaluation photos are drawings, and the model correctly says they are not real photographs. The vision model's fraud precision therefore **cannot be measured with this set**; it needs real photographs. We report the number as measured and do not claim it reflects real use.
+- The set is small, was written by the team, and uses drawings instead of real photos. These numbers do not predict real-world performance.
 
 ### 7.2 Automated checks
 
@@ -196,7 +198,7 @@ https://github.com/Ankit28max/next-project
 ## 11. Future work
 
 - Upgrade to the current Next.js release and re-audit dependencies.
-- Evaluate the vision model on real, consented photos and report its precision and recall.
+- Evaluate the vision model's fraud signals on real, consented photographs (the synthetic set cannot measure them).
 - Shared rate limiting (Redis) and nonce-based CSP.
 - Private photo storage with signed URLs.
 - Multilingual text matching for duplicates (embeddings) and Hindi/Punjabi interface.

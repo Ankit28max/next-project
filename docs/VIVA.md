@@ -161,7 +161,7 @@ Everyone must be able to walk through the full life of one complaint (section 0)
 2. *What happens if Gemini is down?*
    `classifyWithGemini` throws (timeout after 10 s, HTTP error, or invalid JSON). `classify()` catches it, uses the rules result, and stores `provider = "rules"` with the reason. The officer sees "Running on fallback keyword rules".
 3. *How accurate is it?*
-   On our 33-case set, rules alone got 31 right (93.9%). The two misses and why are in the README. It is a small set we wrote ourselves with synthetic photos, so this is not a real-world accuracy. Vision-model accuracy has not been measured.
+   On our 33-case set, rules alone got 31 categories right (93.9%) and the vision model got 33. The two rule misses and why are in the README. It is a small set we wrote ourselves with synthetic photos, so this is not a real-world accuracy.
 4. *Is the app using AI right now?*
    Check `/api/health` or the admin dashboard: it says "rules only" or "vision model with rules fallback". The dashboard also counts how many complaints each provider categorised. Answer with what it shows.
 5. *Trap: "Why can an AI not be trusted to auto-reject fake complaints?"*
@@ -191,6 +191,8 @@ Everyone must be able to walk through the full life of one complaint (section 0)
    Four things. The "category mismatch" check compared the AI's own category against the text it had just classified, so it was circular: removed. The gibberish regex flagged "Plot 12345": now only repeated letters and whole filler words count. The duplicate result was passed in but never used: now a self-duplicate adds points. HIGH was 60 in one place and 65 in another: now one constant.
 5. *Trap: "Precision 60%, recall 60%. Is that good?"*
    It is honest. On 5 suspicious cases, rules caught the 3 that leave traces in metadata or text and missed the 2 that require looking at the photo. With so few cases the percentages move 20 points per case. What it shows is the shape of the problem: rules need the vision model for content, and both need a human.
+6. *Trap: "With the vision model your precision dropped to 19%. So the AI made it worse?"*
+   Recall went to 5 of 5, but 21 genuine cases were flagged too. Look at why: our test photos are drawings, and the model correctly said "this is not a real photograph". That is the model working and our test data being unsuitable. We cannot claim a real precision until we test on real photos, and we say so in the README instead of hiding the number. It is also one more reason the score is advisory.
 
 ## 7. Routing
 

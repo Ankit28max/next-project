@@ -15,6 +15,8 @@ import { hammingDistance } from '../src/lib/images/dhash';
 import { processUpload, type ProcessedImage } from '../src/lib/images/process';
 
 const START = new Date('2026-11-10T04:30:00.000Z'); // 10:00 IST
+// The free Gemini tier allows roughly 15 requests per minute, so vision calls are spaced out.
+const VISION_PAUSE_MS = 5000;
 const percent = (n: number, d: number) => (d === 0 ? 'n/a' : `${((100 * n) / d).toFixed(1)}%`);
 
 interface Processed {
@@ -56,6 +58,7 @@ async function main() {
     if (rules.categoryCode === c.expectedCategory) rulesCorrect++;
     let vision: GeminiResult | null = null;
     if (useVision) {
+      await new Promise((resolve) => setTimeout(resolve, VISION_PAUSE_MS));
       try {
         vision = await classifyWithGemini({ title: c.title, description: c.description, jpeg: image.jpeg });
         visionAnswered++;

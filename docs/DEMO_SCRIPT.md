@@ -12,6 +12,10 @@
 - On the **deployed** site there are no complaints yet, so record shot 3 first and use that complaint as the "original" for shots 5 and 6. The duplicate and fake examples must be near it: use the same map pin.
 - **Pin location matters.** The sample photos carry GPS metadata from Phagwara (near LPU). Put the map pin in Phagwara: on campus use *Use my location*; anywhere else, click the map near LPU instead. A pin more than 2 km from the photo's GPS adds "photo GPS far from the pin" to the risk reasons of the genuine complaint.
 - Expected results with this data (checked against the scoring code): shot 3 risk 0 (low); shot 5 match score 0.71 with the first report; shot 6 risk 40 (medium) with two reasons.
+- **Vision model on or off?** The sample photos in `eval/images/` are drawings. With a Gemini key configured, the model correctly reports that they are not real photographs, so every sample complaint gets "looks like a stock image or screenshot" and a medium risk. Choose one:
+  - *Recommended:* use **your own phone photos** of a real pothole and a real garbage pile for shots 3 and 5 (no people in the frame). The model then categorises from the photo and the risk stays low. Keep `garbage-old-elsewhere.jpg` for shot 6: it will show the metadata reasons plus the vision reason.
+  - Or record with `GEMINI_API_KEY` removed, and say on camera that the app is running on fallback keyword rules. The expected scores below are for this rules-only mode.
+- The free Gemini tier allows about 15 requests per minute. If a complaint shows "Running on fallback keyword rules: HTTP 429" or "timed out", wait a minute and submit the next one.
 - Say only what the screen shows. Do not quote accuracy numbers other than those in the README.
 
 | # | Time | Screen | Do | Say |
