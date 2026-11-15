@@ -126,8 +126,9 @@ export async function StaffComplaintView({ id, user, basePath, notice, children 
             ) : (
               <div className="space-y-4 text-sm">
                 {analysis.provider === 'rules' && (
-                  <Alert variant="info" title="Running on fallback keyword rules">
-                    {analysis.fallbackReason} The photo was not analysed by a vision model.
+                  <Alert variant="info" title="This complaint was analysed with fallback keyword rules">
+                    When it was submitted on {formatDate(analysis.createdAt)}: {analysis.fallbackReason} The photo was not analysed by a
+                    vision model. The analysis is stored at submission and is not repeated later.
                   </Alert>
                 )}
                 <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
