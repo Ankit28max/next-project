@@ -1,22 +1,24 @@
-import { redirect } from 'next/navigation';
-import { getSessionUser } from '@/lib/auth/session';
-import { CitizenNav } from '@/components/layout/CitizenNav';
+import { prisma } from '@/lib/db/prisma';
+import { requireRolePage } from '@/lib/auth/session';
+import { AreaNav } from '@/components/layout/AreaNav';
 
-export default async function CitizenLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const user = await getSessionUser();
-
-  if (!user) {
-    redirect('/login');
-  }
+// Reads the session cookie, so everything under /citizen is rendered per request (dynamic rendering).
+export default async function CitizenLayout({ children }: { children: React.ReactNode }) {
+  const user = await requireRolePage('CITIZEN');
+  const unread = await prisma.notification.count({ where: { userId: user.id, readAt: null } });
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <CitizenNav />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">{children}</div>
-    </div>
+    <>
+      <AreaNav
+        title="Citizen"
+        items={[
+          { href: '/citizen', label: 'Overview' },
+          { href: '/citizen/submit', label: 'Report a problem' },
+          { href: '/citizen/complaints', label: 'My complaints' },
+          { href: '/citizen/notifications', label: 'Notifications', badge: unread },
+        ]}
+      />
+      <div className="page">{children}</div>
+    </>
   );
 }

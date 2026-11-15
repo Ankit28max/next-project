@@ -1,259 +1,92 @@
-import React from 'react';
-import Link from 'next/link';
+import { Suspense } from 'react';
+import type { Metadata } from 'next';
 import { prisma } from '@/lib/db/prisma';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import {
-  Activity,
-  ArrowRight,
-  BarChart3,
-  Building2,
-  CheckCircle2,
-  Clock,
-  CopyCheck,
-  FileText,
-  PieChart,
-  ShieldAlert,
-  Users2,
-  Workflow,
-} from 'lucide-react';
+import { requireRolePage } from '@/lib/auth/session';
+import { OPEN_STATUSES } from '@/lib/ai/config';
+import { isGeminiConfigured } from '@/lib/ai/gemini';
+import { Alert } from '@/components/ui/alert';
+import { STATUS_LABELS } from '@/components/ui/badges';
+import { Card, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { BarList, StatGrid } from '@/components/ui/stat';
 
-export const dynamic = 'force-dynamic';
+export const metadata: Metadata = { title: 'Admin dashboard' };
 
-export default async function AdminDashboardPage() {
-  const [
-    totalCount,
-    submittedCount,
-    inProgressCount,
-    resolvedCount,
-    highFraudRiskCount,
-    duplicateCount,
-    deptStats,
-    catStats,
-    resolvedComplaints,
-    recentAuditLogs,
-  ] = await Promise.all([
+async function Counts() {
+  const [total, open, resolved, triage, highRisk, withDuplicates] = await Promise.all([
     prisma.complaint.count(),
-    prisma.complaint.count({ where: { status: 'SUBMITTED' } }),
-    prisma.complaint.count({ where: { status: 'IN_PROGRESS' } }),
+    prisma.complaint.count({ where: { status: { in: [...OPEN_STATUSES] } } }),
     prisma.complaint.count({ where: { status: 'RESOLVED' } }),
+    prisma.complaint.count({ where: { needsManualTriage: true } }),
     prisma.complaint.count({ where: { fraudRiskLevel: 'HIGH' } }),
-    prisma.complaintMatch.count(),
-    prisma.department.findMany({
-      include: {
-        _count: { select: { complaints: true, officers: true } },
-      },
-      orderBy: { name: 'asc' },
-    }),
-    prisma.complaintCategory.findMany({
-      include: {
-        _count: { select: { complaints: true } },
-      },
-      orderBy: { name: 'asc' },
-    }),
-    prisma.complaint.findMany({
-      where: { status: 'RESOLVED', resolvedAt: { not: null } },
-      select: { createdAt: true, resolvedAt: true },
-    }),
-    prisma.auditLog.findMany({
-      include: { actor: { select: { name: true, role: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: 6,
-    }),
+    prisma.complaint.count({ where: { matchesAsSource: { some: {} } } }),
   ]);
+  return (
+    <StatGrid
+      items={[
+        { label: 'All complaints', value: total, href: '/admin/complaints' },
+        { label: 'Open', value: open },
+        { label: 'Resolved', value: resolved, href: '/admin/complaints?status=RESOLVED' },
+        { label: 'Need manual triage', value: triage, href: '/admin/complaints?triage=1' },
+        { label: 'High risk', value: highRisk, href: '/admin/complaints?risk=HIGH' },
+        { label: 'With possible duplicates', value: withDuplicates },
+      ]}
+    />
+  );
+}
 
-  // Calculate Average Resolution Time in Hours
-  let avgResolutionHours = 0;
-  if (resolvedComplaints.length > 0) {
-    const totalHours = resolvedComplaints.reduce((acc, curr) => {
-      if (!curr.resolvedAt) return acc;
-      const diffMs = new Date(curr.resolvedAt).getTime() - new Date(curr.createdAt).getTime();
-      return acc + diffMs / (1000 * 60 * 60);
-    }, 0);
-    avgResolutionHours = Math.round((totalHours / resolvedComplaints.length) * 10) / 10;
-  }
+async function ByDepartment() {
+  const departments = await prisma.department.findMany({
+    select: { name: true, _count: { select: { complaints: true } } },
+    orderBy: { name: 'asc' },
+  });
+  return <BarList emptyText="No departments yet." rows={departments.map((d) => ({ label: d.name, value: d._count.complaints }))} />;
+}
 
+async function ByStatus() {
+  const groups = await prisma.complaint.groupBy({ by: ['status'], _count: { _all: true } });
+  return <BarList emptyText="No complaints yet." rows={groups.map((g) => ({ label: STATUS_LABELS[g.status], value: g._count._all })).sort((a, b) => b.value - a.value)} />;
+}
+
+async function ByClassifier() {
+  const groups = await prisma.complaintAnalysis.groupBy({ by: ['provider'], _count: { _all: true } });
+  const label = (p: string) => (p === 'gemini' ? 'Vision model' : 'Keyword rules (fallback)');
+  return <BarList emptyText="No analyses yet." rows={groups.map((g) => ({ label: label(g.provider), value: g._count._all }))} />;
+}
+
+export default async function AdminDashboard() {
+  await requireRolePage('ADMIN');
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <span className="text-xs font-semibold text-rose-800 uppercase tracking-wider bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-            System Administration & Analytics Center
-          </span>
-          <h1 className="text-2xl font-bold text-slate-900 mt-1">
-            JanSetu Governance Dashboard
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Real-time database-backed performance analytics, fraud alert monitoring, and civic triage telemetry.
-          </p>
-        </div>
-
-        <div className="flex gap-2">
-          <Link href="/admin/complaints">
-            <Button variant="primary" size="sm">
-              <FileText className="h-4 w-4 mr-1.5" />
-              Manage All Grievances
-            </Button>
-          </Link>
-        </div>
-      </div>
-
-      {/* Metrics Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
-        <Card className="border-slate-200 bg-white shadow-xs">
-          <CardContent className="p-4">
-            <span className="text-[11px] text-slate-500 font-medium block">Total Grievances</span>
-            <span className="text-2xl font-bold text-slate-900 mt-1 block">{totalCount}</span>
-          </CardContent>
+      <h1>Dashboard</h1>
+      {!isGeminiConfigured() && (
+        <Alert variant="info" title="Running on fallback keyword rules">
+          No vision model key is configured, so photos are not analysed by a model. Categories come from keyword rules only.
+        </Alert>
+      )}
+      <Suspense fallback={<Skeleton className="h-48" />}>
+        <Counts />
+      </Suspense>
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card>
+          <CardTitle>Complaints per department</CardTitle>
+          <Suspense fallback={<Skeleton className="h-32" />}>
+            <ByDepartment />
+          </Suspense>
         </Card>
-
-        <Card className="border-slate-200 bg-white shadow-xs">
-          <CardContent className="p-4">
-            <span className="text-[11px] text-slate-500 font-medium block">New / Submitted</span>
-            <span className="text-2xl font-bold text-blue-600 mt-1 block">{submittedCount}</span>
-          </CardContent>
+        <Card>
+          <CardTitle>Complaints per status</CardTitle>
+          <Suspense fallback={<Skeleton className="h-32" />}>
+            <ByStatus />
+          </Suspense>
         </Card>
-
-        <Card className="border-slate-200 bg-white shadow-xs">
-          <CardContent className="p-4">
-            <span className="text-[11px] text-slate-500 font-medium block">Active In Field</span>
-            <span className="text-2xl font-bold text-amber-600 mt-1 block">{inProgressCount}</span>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 bg-white shadow-xs">
-          <CardContent className="p-4">
-            <span className="text-[11px] text-slate-500 font-medium block">Resolved Total</span>
-            <span className="text-2xl font-bold text-emerald-600 mt-1 block">{resolvedCount}</span>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 bg-white shadow-xs">
-          <CardContent className="p-4">
-            <span className="text-[11px] text-slate-500 font-medium block">Avg Resolution</span>
-            <span className="text-2xl font-bold text-gov-800 mt-1 block">
-              {avgResolutionHours > 0 ? `${avgResolutionHours}h` : 'N/A'}
-            </span>
-          </CardContent>
-        </Card>
-
-        <Card className="border-rose-200 bg-rose-50/50 shadow-xs">
-          <CardContent className="p-4">
-            <span className="text-[11px] text-rose-700 font-bold block">Fraud Alerts</span>
-            <span className="text-2xl font-bold text-rose-700 mt-1 block">{highFraudRiskCount}</span>
-          </CardContent>
+        <Card>
+          <CardTitle>Who categorised</CardTitle>
+          <Suspense fallback={<Skeleton className="h-32" />}>
+            <ByClassifier />
+          </Suspense>
         </Card>
       </div>
-
-      {/* Two Column Layout: Department Workload & Category Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Department Workload Card */}
-        <Card className="border-slate-200">
-          <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-gov-700" />
-              <span>Complaints by Department & Staff Capacity</span>
-            </CardTitle>
-            <Link href="/admin/departments" className="text-xs text-gov-700 hover:underline">
-              Manage
-            </Link>
-          </CardHeader>
-          <CardContent className="p-5 space-y-4">
-            {deptStats.map((dept) => {
-              const count = dept._count.complaints;
-              const pct = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
-
-              return (
-                <div key={dept.id} className="space-y-1.5">
-                  <div className="flex justify-between text-xs">
-                    <span className="font-semibold text-slate-800">
-                      {dept.name} ({dept.code})
-                    </span>
-                    <span className="text-slate-500 font-mono">
-                      {count} cases ({pct}%) • {dept._count.officers} officers
-                    </span>
-                  </div>
-                  <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-                    <div
-                      className="h-full bg-gov-700 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.max(4, pct)}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-
-        {/* Complaints by Category Card */}
-        <Card className="border-slate-200">
-          <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <PieChart className="h-4 w-4 text-gov-700" />
-              <span>Complaints by Civic Category</span>
-            </CardTitle>
-            <Link href="/admin/routing" className="text-xs text-gov-700 hover:underline">
-              Routing Rules
-            </Link>
-          </CardHeader>
-          <CardContent className="p-5 space-y-4">
-            {catStats.map((cat) => {
-              const count = cat._count.complaints;
-              const pct = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
-
-              return (
-                <div key={cat.id} className="space-y-1.5">
-                  <div className="flex justify-between text-xs">
-                    <span className="font-semibold text-slate-800">{cat.name}</span>
-                    <span className="text-slate-500 font-mono">
-                      {count} ({pct}%)
-                    </span>
-                  </div>
-                  <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-                    <div
-                      className="h-full bg-blue-600 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.max(4, pct)}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* System Audit Activity Strip */}
-      <Card className="border-slate-200">
-        <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
-          <CardTitle className="text-sm font-bold flex items-center gap-2">
-            <Activity className="h-4 w-4 text-gov-700" />
-            <span>Recent System Audit Activity</span>
-          </CardTitle>
-          <Link href="/admin/audit" className="text-xs text-gov-700 hover:underline">
-            View All Audit Logs
-          </Link>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="divide-y divide-slate-100 text-xs">
-            {recentAuditLogs.map((log) => (
-              <div key={log.id} className="p-4 flex items-center justify-between gap-4">
-                <div className="space-y-0.5">
-                  <span className="font-semibold text-slate-900 block font-mono">
-                    {log.action}
-                  </span>
-                  <span className="text-slate-500 text-[11px]">
-                    Actor: {log.actor?.name || 'System Auto-Engine'} ({log.actor?.role || 'SYSTEM'}) • Entity: {log.entityType}
-                  </span>
-                </div>
-                <time className="text-[11px] text-slate-400 font-mono flex-shrink-0">
-                  {new Date(log.createdAt).toLocaleTimeString()}
-                </time>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
