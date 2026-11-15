@@ -71,3 +71,27 @@ Verified in a real browser: wizard validation on every step, "Use my location", 
 Not yet run in the browser: reopen, mark-as-read, admin create/deactivate officer, routing rule, reassign, responsive screenshots (script is ready in the session scratchpad, not in the repo).
 
 Still to do: README, docs/REPORT.md, docs/VIVA.md, docs/DEMO_SCRIPT.md, Lighthouse, Gemini verification (needs key), push + Vercel/Neon/Blob deploy (needs working GitHub auth), production seed.
+
+## Sun 21:40-22:15 - form feedback fix, push, docs
+
+- **Fixed** the open bug: successful Server Actions now redirect back with a whitelisted `?notice=` code that the server renders (Post/Redirect/Get). Validation errors still return through `useFormState`.
+- **Verified in headless Chrome** (local production build): full wizard, officer status update and internal note, citizen sees resolution but not the note or risk, reopen, mark one / mark all notifications read, public tracker (status shown, title hidden), admin create + deactivate officer, add routing rule, reassign (previous department's officer loses access). No console errors. No horizontal overflow at 360 / 768 / 1280 px after a 6 px nav fix.
+- **Pushed.** SSH keys still fail on this machine, so pushes go over HTTPS with the `gh` login (`git -c credential.helper='!gh auth git-credential' push https://github.com/Ankit28max/next-project.git <branch>`). No git config was changed. `phase-1-foundation` merged to `main` after lint, typecheck, tests and build passed.
+- **Lighthouse (local production build, not the deployed URL):** landing 99/100/100/100 mobile and 100/100/100/100 desktop; citizen dashboard the same. Deployed-URL run: not done (no deployment yet).
+- **Docs written:** README, docs/REPORT.md, docs/VIVA.md, docs/DEMO_SCRIPT.md. Demo-script data was run through the real scoring functions (duplicate 0.71, fake 40/MEDIUM).
+- **Tier 3:** admin dashboard has simple HTML bar charts. A CI workflow (lint, typecheck, test, eval, build) is written on the local branch `ci-workflow` but NOT pushed: the `gh` token lacks the `workflow` scope (`gh auth refresh -s workflow`, then push that branch).
+
+## Cut (and why)
+
+- Next.js upgrade: stayed on 14.2.35; end-of-life risk stated in the README. Too risky one day before the deadline.
+- Dockerfile: not needed for Vercel; listed as future work.
+- `any` cleanup: moot, the rewritten code has no `any`.
+- Citizen profile page, officer workload page, admin users page from the template: removed rather than restyled (they were read-only filler; workload is now on the officer overview).
+- E2E browser tests are not in the repository (they were run from a scratch folder with puppeteer-core and the system Chrome). Only unit tests are committed.
+
+## Unverified (needs the human-only setup)
+
+- Vercel deployment, `prisma migrate deploy` on Neon, Vercel Blob storage path of `storage.ts`, `seed:prod` against Neon.
+- The Gemini call end to end, and the default model name `gemini-2.5-flash` (no key was available; if the name is retired the app falls back to rules and says so).
+- Lighthouse against the deployed URL.
+- The GitHub Actions workflow has never run (not pushed, see above).

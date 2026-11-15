@@ -1,211 +1,253 @@
-# JanSetu: Smart Grievance Redressal & Fake Complaint Detection System
+# JanSetu
 
-An enterprise-grade civic grievance redressal portal built with Next.js App Router, Prisma ORM, PostgreSQL, Tailwind CSS, Leaflet OpenStreetMap, and Multimodal AI.
+**Smart Grievance Redressal & Fake Complaint Detection System**
+Course project for INT257, Modern Web Application Development.
 
-Designed for municipal governance and participatory civic redressing, the platform allows citizens to file grievances with photo evidence and GPS coordinates, while applying automated AI pipelines to classify categories, cluster geographic duplicates, flag suspicious submissions, and balance department officer workloads.
+> Academic project, not affiliated with any government body. Complaints submitted here are not sent to any authority.
 
----
+- **Live deployment:** _to be added after the Vercel deployment (see [Deploy](#deploy-vercel--neon--vercel-blob))_
+- **Repository:** https://github.com/Ankit28max/next-project
+- **Team:** Abhinav Singla (12408467), Ankit Singh (12407308), Devansh (12407745)
 
-## 🏛️ System Overview & Objectives
+## What it is
 
-In civic governance, traditional portals suffer from three primary bottlenecks:
-1. **Misrouting Delays**: Citizens frequently select inappropriate departments, causing multi-week manual rerouting.
-2. **Duplicate Fatigue**: When a water pipeline bursts or a major road develops a pothole, dozens of independent citizens report the same incident, leading to fragmented, redundant field team dispatches.
-3. **Spam & Stock Photo Abuse**: False, malicious, or test submissions consume scarce field resources and compromise municipal analytics.
+A grievance portal where a citizen reports a civic problem (pothole, garbage, water, drainage, streetlight) with a description, a pinned map location and one photo. The system then:
 
-**JanSetu addresses these challenges via an end-to-end automated pipeline:**
-- **Multimodal AI Classification**: Inspects complaint semantics and images to predict category, assign priority, and recommend the responsible municipal department.
-- **Multi-Signal Duplicate Clustering**: Fuses spatial Haversine radius (<2km), TF-IDF text token similarity, category matching, and photo hash matching into a combined duplicate likelihood score.
-- **Advisory Fraud Risk Scoring**: Calculates a 0–100 risk score and highlights specific anomaly flags (reused photos, keyboard-smash/spam text patterns, submission velocity bursts) for officer field verification without automated citizen penalization.
-- **Workload-Balanced Routing**: Automatically assigns incoming grievances to active department officers with the lowest open ticket count.
+1. checks and cleans the photo, and computes a visual fingerprint of it;
+2. suggests a category (keyword rules, plus a vision model when configured);
+3. links likely duplicates of the same incident;
+4. gives officers a risk score with written reasons for possibly fake or misleading submissions;
+5. routes the complaint to a department and to the officer with the fewest open cases.
 
----
+**The automatic analysis is advisory.** It never rejects a complaint. A human officer reads the reasons and decides.
 
-## 🛠️ Technology Stack
+## Features
 
-| Layer | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Framework** | Next.js 14+ (App Router) | Server Components, Server Actions & REST API Route Handlers |
-| **Language** | TypeScript (Strict Mode) | Type safety across full frontend and backend data structures |
-| **Database** | PostgreSQL 16 | Relational persistence with ACID transactions, constraints & indexes |
-| **ORM** | Prisma ORM | Data modeling, migrations, and relational query builder |
-| **Authentication** | Custom Session Tokens & bcrypt | Role-Based Access Control (RBAC) with secure HTTP-only cookies |
-| **Styling & UI** | Tailwind CSS & Lucide Icons | Clean civic-tech design, responsive layouts, accessible UI |
-| **Maps & Geo** | Leaflet & OpenStreetMap | Client-side interactive pin drop, GPS capture, reverse geocoding |
-| **AI Layer** | Dual Provider Architecture | Deterministic Academic Engine + Google Gemini Multimodal Vision |
-| **Testing** | Vitest | Automated unit and integration testing of algorithms & auth |
+| Role | What they can do |
+|---|---|
+| Visitor | Read how the system works; track any complaint's status by reference number (status, category and department only) |
+| Citizen | Register, submit a complaint through a 4-step wizard, follow the status timeline, reopen a closed complaint, read notifications |
+| Officer | See the queue of their own department with filters, review a complaint (photo, map, analysis, risk reasons, side-by-side duplicate comparison), update status, add internal notes |
+| Admin | Dashboard with counts, all complaints, manual reassignment, create/deactivate officers, edit routing rules, audit log |
 
----
+## Architecture
 
-## 👥 Roles & Permissions Matrix
+```mermaid
+flowchart TD
+    B[Browser] -->|pages, Server Actions| N[Next.js 14 App Router on Vercel]
+    B -->|map tiles| OSM[OpenStreetMap tiles]
+    N --> MW[middleware.ts<br/>session + role check]
+    MW --> RSC[Server Components<br/>read data with Prisma]
+    MW --> SA[Server Actions<br/>submit, status, reopen, admin]
+    MW --> API[API routes<br/>auth, upload, geocode, health]
+    SA --> PIPE[Submit pipeline<br/>classify, duplicates, risk, routing]
+    API --> IMG[Image processing<br/>magic bytes, EXIF, sharp, dHash]
+    IMG --> ST[storage.ts]
+    ST -->|production| BLOB[(Vercel Blob)]
+    ST -->|development| DISK[(.uploads folder)]
+    PIPE -->|optional, 10 s timeout| GEM[Google Gemini vision model]
+    PIPE --> DB[(PostgreSQL<br/>Neon in production)]
+    RSC --> DB
+    API -->|cached, 1 req/s| NOM[Nominatim reverse geocoding]
+```
 
-| Feature / Action | Citizen | Department Officer | System Administrator |
-| :--- | :---: | :---: | :---: |
-| Self-Registration & Profile Management | ✅ | ❌ (Seeded/Admin Created) | ❌ (Root Account) |
-| File Grievance with Photo & Location | ✅ | ❌ | ❌ |
-| Live Timeline Progress Tracking | ✅ (Public view) | ✅ (Full view) | ✅ (Full view) |
-| Reopen Resolved Grievance | ✅ | ❌ | ✅ |
-| Department Complaint Queue Access | ❌ | ✅ (Assigned Dept only) | ✅ (All Depts) |
-| View Duplicate & Fraud Anomaly Telemetry | ❌ (Masked) | ✅ | ✅ |
-| Update Status & Add Resolution Summary | ❌ | ✅ | ✅ |
-| Post Internal Staff Notes | ❌ | ✅ | ✅ |
-| Reassign Department / Officer | ❌ | ❌ | ✅ |
-| Manage Departments, Rules & Audit Logs | ❌ | ❌ | ✅ |
+Folder guide:
 
----
+```
+prisma/            schema, migrations, demo seed, production seed
+src/app/           pages (App Router), API routes, loading/error/not-found
+src/actions/       Server Actions
+src/lib/auth/      JWT session, role and ownership checks
+src/lib/images/    upload validation, EXIF, dHash, browser-side resize
+src/lib/ai/        config, rules classifier, Gemini call, duplicates, risk, routing
+src/lib/complaints submit pipeline, status workflow, reference numbers
+src/components/    UI components
+eval/              labelled evaluation set and synthetic photos
+scripts/           eval runner, eval image generator
+tests/             unit tests (Vitest) that import the real application code
+docs/              REPORT, VIVA, DEMO_SCRIPT, PROGRESS
+```
 
-## 🤖 AI Detection Methodology
+## Technology
 
-### 1. Multimodal Category Classification
-The system analyzes the grievance text using direct linguistic markers and contextual clustering to predict the civic department:
-- **Roads & Potholes** (`ROADS`): Asphalt, crater, pavement, road cave-in $\rightarrow$ **Public Works Dept (PWD)**
-- **Water Supply & Leakage** (`WATER_SUPPLY`): Pipe burst, water pressure, contamination $\rightarrow$ **Water Board (WATER)**
-- **Streetlights & Electricity** (`LIGHTING`): Dark road, pole, transformer, wire $\rightarrow$ **Electricity Authority (ELEC)**
-- **Sanitation & Garbage** (`SANITATION`): Waste, garbage dump, filth $\rightarrow$ **Health & Sanitation (HEALTH)**
-- **Drainage & Sewage** (`DRAINAGE`): Overflowing drain, clogged manhole $\rightarrow$ **Water Board (WATER)**
+Next.js 14.2 (App Router, Server Components, Server Actions), React 18, TypeScript, Tailwind CSS, PostgreSQL with Prisma 5, `jose` (JWT), `bcryptjs`, `zod`, `sharp`, `exifr`, Leaflet + OpenStreetMap, Vercel Blob, Google Gemini (optional), Vitest.
 
-Urgency tokens (`hazard`, `emergency`, `accident`, `burst`) automatically elevate priority to **URGENT** or **HIGH**.
+## Prerequisites
 
-### 2. Multi-Signal Duplicate Detection
-To distinguish unique incidents from redundant citizen reports on the same issue:
+- Node.js 20.6 or newer (developed on Node 22)
+- Docker (for the local PostgreSQL database)
 
-$$\text{Combined Duplicate Score} = \left( 0.35 \cdot S_{\text{text}} + 0.35 \cdot S_{\text{geo}} + 0.15 \cdot S_{\text{cat}} + 0.15 \cdot S_{\text{img}} \right) \times T_{\text{decay}}$$
+## Installation (local)
 
-- **$S_{\text{text}}$**: Cosine token overlap similarity between incident descriptions.
-- **$S_{\text{geo}}$**: Haversine distance over WGS84 coordinates ($1.0$ if distance $\le 50\text{m}$, scaling down to $0$ if $> 2\text{km}$).
-- **$S_{\text{cat}}$**: Binary indicator ($1.0$ if matching civic categories).
-- **$S_{\text{img}}$**: Perceptual/content image hash match ($0.95$ if matching evidence).
-- **$T_{\text{decay}}$**: Proximity decay factor over 60 days.
-
-*Note: Duplicate complaints are linked in the database and flagged for officers to coordinate dispatch—never deleted automatically.*
-
-### 3. Fake & Suspicious Complaint Scoring
-Evaluates 5 risk vectors to output a score from **0 to 100** and risk level (**LOW**, **MEDIUM**, **HIGH**):
-1. **Reused Photo Evidence Across Disparate Accounts**: Exact image hash match submitted by an unrelated citizen account or different location ($+45$ risk penalty).
-2. **Text Spam & Keyboard Smash Patterns**: Regular expression regex matching repeated sequences (`asdfghjk`, `12345`, `qwerty`) ($+30$ risk penalty).
-3. **Brevity & Information Deficit**: Descriptions under 20 characters ($+25$ risk penalty).
-4. **Velocity Bursts**: Citizen submitting $\ge 4$ grievances within 10 minutes ($+35$ risk penalty).
-5. **Category-Content Semantic Mismatch**: Grievance text devoid of category domain terminology ($+15$ risk penalty).
-
-> [!IMPORTANT]
-> **Academic & Civic Safeguard**: Algorithmic risk scores serve strictly as an advisory flag to guide officer on-site verification. The platform enforces zero biometric tracking and never executes automated citizen penalties.
-
----
-
-## 🚀 Quick Setup & Installation
-
-### Prerequisites
-- Node.js 18.x or 20.x
-- PostgreSQL 14+ running locally or managed cloud instance (e.g., Supabase / Neon)
-
-### 1. Clone & Install Dependencies
 ```bash
-cd /home/ankit/next-project
-npm install
+git clone https://github.com/Ankit28max/next-project.git
+cd next-project
+npm install                       # also runs `prisma generate`
+
+npm run db:up                     # starts PostgreSQL in Docker on port 5433
+
+cp .env.example .env.development.local
+# edit .env.development.local: set JWT_SECRET (openssl rand -base64 48)
+
+npm run db:migrate                # applies the migrations
+npm run seed:demo                 # LOCAL ONLY: wipes the database and loads demo data
+npm run dev                       # http://localhost:3000
 ```
 
-### 2. Configure Environment Variables
-Copy the template and adjust if necessary:
-```bash
-cp .env.example .env
-```
-Ensure your `DATABASE_URL` is set:
-```env
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/grievance_db?schema=public"
-JWT_SECRET="academic-demo-jwt-secret-key-super-secure-min-32-chars-2026"
-AI_PROVIDER="mock" # Set to "gemini" if GEMINI_API_KEY is provided
-```
+To run a production build locally, copy the same file to `.env.production.local`, then `npm run build && npm start`.
 
-### 3. Generate Prisma Client & Migrate Database
-```bash
-npx prisma generate
-npx prisma db push
-```
+## Configuration
 
-### 4. Seed Database with Realistic Scenarios
-```bash
-npm run prisma:seed
-```
-*This populates departments, officers, citizen accounts, realistic grievances with duplicate pairs, and suspicious test cases.*
+| Variable | Required | Purpose |
+|---|---|---|
+| `DATABASE_URL` | yes | PostgreSQL connection used by the app. On Neon: the **pooled** connection string |
+| `DIRECT_URL` | yes | Connection used by `prisma migrate`. On Neon: the **direct** connection string. Locally: same as `DATABASE_URL` |
+| `JWT_SECRET` | yes | Signs session cookies. At least 32 characters. The server refuses to start without it; there is no default |
+| `GEMINI_API_KEY` | no | Google AI Studio key. Without it the app runs on keyword rules only, and says so in the UI |
+| `GEMINI_MODEL` | no | Vision model name (default `gemini-2.5-flash`) |
+| `BLOB_READ_WRITE_TOKEN` | on Vercel | Set automatically when a Vercel Blob store is linked. Without it, photos go to the local `.uploads/` folder (development only) |
+| `SEED_ADMIN_PASSWORD`, `SEED_OFFICER_PASSWORD`, `SEED_CITIZEN_PASSWORD` | for `seed:prod` | Passwords for the accounts created by the production seed (10+ characters) |
+| `GEOCODER_CONTACT` | no | Contact address sent in the User-Agent to OpenStreetMap Nominatim, as its usage policy asks |
 
-### 5. Launch Development Server
-```bash
-npm run dev
-```
-Open **[http://localhost:3000](http://localhost:3000)** in your browser.
+Which file holds what:
 
----
+- `.env.development.local` and `.env.production.local`: local Docker database. Used by `npm run dev`, `db:migrate`, `seed:demo` and local production builds.
+- `.env.local`: the real Neon and Gemini values. Used by `npm run seed:prod` and `npm run eval`.
+- All `.env*` files except `.env.example` are ignored by git.
 
-## 🔑 Demo Accounts for University Evaluators
+## Commands
 
-The database seed provides ready-to-test accounts representing each perspective. All passwords are pre-configured:
+| Command | What it does |
+|---|---|
+| `npm run dev` | Development server |
+| `npm run build` / `npm start` | Production build / run it |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | TypeScript check |
+| `npm test` | Unit tests |
+| `npm run eval` | Runs the labelled evaluation set and prints accuracy, precision, recall |
+| `npm run db:up` | Start local PostgreSQL |
+| `npm run db:migrate` | Create/apply migrations on the local database |
+| `npm run seed:demo` | **Local only.** Deletes everything, then loads demo accounts and complaints. Refuses to run with `NODE_ENV=production` or against a non-local database |
+| `npm run seed:prod` | Non-destructive: creates departments, categories, 1 admin, 4 officers, 1 demo citizen if they do not exist |
 
-| Role | Email | Password | Details |
-| :--- | :--- | :--- | :--- |
-| **Citizen (Primary)** | `citizen@grievance.gov.in` | `Citizen@123` | Amit Patel — Has active & resolved grievances |
-| **Citizen (Duplicate Reporter)** | `citizen.priya@grievance.gov.in` | `Citizen@123` | Priya Sharma — Filed duplicate water burst report |
-| **Officer (PWD - Roads)** | `officer.pwd@grievance.gov.in` | `Officer@123` | Er. Rajesh Kumar — Senior Executive Engineer |
-| **Officer (Water Supply)** | `officer.water@grievance.gov.in` | `Officer@123` | Smt. Sunita Verma — Water Inspector |
-| **Officer (Electricity)** | `officer.elec@grievance.gov.in` | `Officer@123` | Shri Vikram Singh — Lighting Engineer |
-| **System Administrator** | `admin@grievance.gov.in` | `Admin@123` | Dr. Ramesh Sharma — Root Admin with full audit control |
+## Demo accounts
 
-*Tip: The login page includes quick-fill buttons for immediate one-click testing.*
+Created by both seeds (the production seed uses the passwords you set in `SEED_*`; for the demo deployment set them to the values below).
 
----
+| Role | Email | Password |
+|---|---|---|
+| Citizen | `citizen@jansetu.example` | `Citizen#2026demo` |
+| Officer (Public Works) | `officer.pwd@jansetu.example` | `Officer#2026demo` |
+| Officer (Water) | `officer.water@jansetu.example` | `Officer#2026demo` |
+| Officer (Electricity) | `officer.elec@jansetu.example` | `Officer#2026demo` |
+| Officer (Sanitation) | `officer.sanitation@jansetu.example` | `Officer#2026demo` |
+| Admin | `admin@jansetu.example` | `Admin#2026demo` |
 
-## 🧪 Testing
+These are throwaway demo credentials for an academic project. They are never shown in the application itself.
 
-Run the automated Vitest test suite:
-```bash
-npm test
-```
-The test suite validates:
-- Haversine geographic distance calculations (0 km to multi-kilometer bounds)
-- TF-IDF token overlap text similarity
-- Gibberish and keyboard-smash spam heuristics
-- AI complaint classification across civic categories
-- Urgency priority elevation
-- Password hashing and JWT session role verification
+## Usage
 
----
+**Citizen**
 
-## 📁 Repository Structure
+1. Register (or sign in with the demo citizen).
+2. *Report a problem*: (1) title and description, (2) click the map or press *Use my location*, then check the address, (3) add one photo, (4) review, tick the consent box, submit.
+3. The result screen shows the reference number, category and department.
+4. *My complaints* shows the status timeline. A resolved or rejected complaint can be reopened with a reason.
+5. Anyone can check a reference number on the *Track* page without signing in.
 
-```
-├── prisma/
-│   ├── schema.prisma           # Relational schema (12 models, relations & indexes)
-│   └── seed.ts                 # Realistic seed data generator
-├── public/
-│   └── uploads/                # Local evidence storage fallback
-├── src/
-│   ├── app/
-│   │   ├── layout.tsx          # Root civic layout with Navbar & Footer
-│   │   ├── page.tsx            # Public Landing Page & Real-Time Stats
-│   │   ├── login/page.tsx      # Multi-role login with demo autofill
-│   │   ├── register/page.tsx   # Citizen registration
-│   │   ├── citizen/            # Citizen Portal (Wizard, Tracking, Notifications)
-│   │   ├── officer/            # Department Officer Workspace & Review
-│   │   ├── admin/              # Admin Analytics, Departments, Rules, Audit
-│   │   └── api/                # Next.js Route Handlers (Auth, Complaints, Upload, Stats)
-│   ├── components/
-│   │   ├── ui/                 # Reusable accessible UI components (Button, Card, Badge, etc.)
-│   │   ├── layout/             # Navbar, Footer, CitizenNav, OfficerNav, AdminNav
-│   │   ├── complaints/         # StatusTimeline, FraudRiskMeter, DuplicateMatchCard, ActionConsole
-│   │   └── maps/               # LeafletLocationPicker & LeafletComplaintMap (SSR safe)
-│   ├── lib/
-│   │   ├── ai/                 # Classification, Duplicate Detection, Fraud Risk, Routing
-│   │   ├── auth/               # Password hashing, JWT sessions, role guards
-│   │   ├── db/                 # Prisma client singleton
-│   │   ├── audit/              # Immutable audit event logger
-│   │   └── utils/              # Haversine distance, text similarity, formatters
-│   └── types/                  # Shared TypeScript interfaces & enums
-├── tests/                      # Automated Vitest test suite
-├── PROJECT_REPORT.md           # University Academic Submission Documentation
-└── README.md
-```
+**Officer**
 
----
+1. Sign in. *Overview* shows open cases, cases assigned to you and reopened cases.
+2. *Complaint queue*: filter by status, risk level, "assigned to me", or search.
+3. Open a complaint: read the report, the automatic analysis, the risk reasons and any possible duplicates side by side.
+4. *Update status* with a remark (the citizen sees it), or add an internal note (staff only).
 
-## 📜 Academic Project Notice
-This project was developed for a university capstone engineering project under the topic **Smart Grievance Redressal & Fake Complaint Detection System**.
-All simulated citizen profiles, photos, and grievances are designed for educational demonstration and research into algorithmic civic transparency.
+**Admin**
+
+1. *Dashboard*: counts, complaints per department and status, and how many were categorised by the vision model vs. rules.
+2. *Complaints*: everything, including the "needs manual triage" filter. Open one to reassign it to a department/officer.
+3. *Officers*: create an officer account, deactivate or reactivate one.
+4. *Routing rules*: keywords that send a complaint to a specific department before the category default.
+5. *Audit log*: who did what.
+
+## How the analysis works (honestly)
+
+Everything below runs on the server. The numbers come from one file: `src/lib/ai/config.ts`.
+
+**On upload** (`src/lib/images/process.ts`)
+- The file type is detected from its first bytes; the browser's file name and MIME type are ignored. Maximum 4 MB.
+- A few EXIF facts are read (capture time, GPS, device, software) and stored. Then the photo is re-encoded with `sharp`, which removes all metadata; only the cleaned JPEG is stored.
+- A 64-bit **dHash** is computed: the image is shrunk to 9×8 grey pixels and each pixel is compared with its right-hand neighbour. Two hashes that differ in at most 10 of 64 bits are treated as the same photo.
+
+**On submit** (`src/lib/complaints/submit.ts`): one database transaction.
+
+| Step | What is rule-based | What the vision model adds |
+|---|---|---|
+| 1. Category | Weighted whole-word keywords in English and Hinglish, fixed tie-break order. Always runs | If `GEMINI_API_KEY` is set: the photo and text are sent to Gemini, which returns JSON (category, severity, `imageMatchesText`, `looksLikeStockOrScreenshot`, reasons). The answer is validated with zod. On any failure (timeout, HTTP error, invalid JSON) the rules result is used and the record says "rules" plus the reason |
+| 2. Duplicates | SQL pre-filter (within 500 m, last 60 days, not rejected), then a score from text similarity 35%, distance 35%, same category 15%, same photo 15%. Score ≥ 0.6 links the two complaints | nothing |
+| 3. Risk score | Same photo used by another citizen, photo GPS far from the pin, old photo, missing EXIF (weak), editing software in metadata, filler text, many submissions in 10 minutes, resubmitting one's own complaint | Photo does not match the text; photo looks like a stock image or screenshot |
+| 4. Routing | Admin keyword rules → category default department → least-loaded active officer | nothing |
+
+- The rules produce a **match strength** (sum of keyword weights). It is **not a probability** and is never shown as a percentage.
+- The risk score is 0–100; 30+ is "medium", 60+ is "high". Every point has a written reason. Only staff see it.
+- If the analysis fails, the complaint is saved as **needs manual triage** with no risk level at all (never "low").
+- Without a Gemini key the app shows "Running on fallback keyword rules" to staff, and `/api/health` reports `rules only`.
+
+## Measured results
+
+From `npm run eval` on the 33 labelled cases in `eval/dataset.ts` (English and Hinglish; 5 duplicate pairs; 5 suspicious cases; **synthetic photos**). Run on 15 Nov 2026, **keyword rules only** (no Gemini key was available).
+
+| Measure | Result |
+|---|---|
+| Category accuracy (rules) | 31 / 33 = 93.9% |
+| Duplicate detection precision | 5 / 5 = 100% |
+| Duplicate detection recall | 5 / 5 = 100% |
+| Suspicious flag precision (risk ≥ 30) | 3 / 5 = 60% |
+| Suspicious flag recall | 3 / 5 = 60% |
+
+What went wrong, case by case:
+
+- Category: "Bikes keep skidding at the turn" has no road keyword (filed as Other). A Hinglish drain complaint containing *ganda pani* was filed as Water Supply.
+- Two false alarms: a neighbour who forwarded the same photo of a real burst pipe, and a citizen who re-sent their own unresolved streetlight complaint.
+- Two misses: a screenshot used as a "photo", and a garbage photo attached to a streetlight complaint. Rules cannot see photo content; these need the vision model.
+
+**Caveat:** this is a small set written by the team, with synthetic drawings instead of real photos. The numbers describe this set only. Vision-model results are **not measured yet**.
+
+## Tests
+
+`npm test` runs 62 unit tests that import the real code: classification, duplicate scoring, risk scoring, hashing and upload processing, routing and reference numbers, authorization, sessions and rate limiting.
+
+## Deploy (Vercel + Neon + Vercel Blob)
+
+1. **Neon:** create a project. Copy the *pooled* connection string and the *direct* connection string.
+2. **Vercel:** import the GitHub repository. In *Settings → Environment Variables* add `DATABASE_URL` (pooled), `DIRECT_URL` (direct), `JWT_SECRET` (`openssl rand -base64 48`), and optionally `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEOCODER_CONTACT`.
+3. **Vercel Blob:** *Storage → Create → Blob*, link it to the project. This adds `BLOB_READ_WRITE_TOKEN`.
+4. Deploy. Vercel runs `npm run vercel-build`, which applies migrations (`prisma migrate deploy`) and then builds.
+5. **Seed once**, from your machine: put the Neon URLs and the three `SEED_*` passwords in `.env.local`, then `npm run seed:prod`.
+6. Check `https://<your-app>/api/health`.
+
+Never run `npm run seed:demo` against production (it refuses to).
+
+## Security notes
+
+- Sessions: JWT in an `httpOnly`, `SameSite=Lax` cookie (`Secure` in production), 7 days. The user is re-read from the database on every request, so deactivated accounts stop working at once.
+- Deny by default: every page, API route and Server Action calls `requireRole`; every complaint read/write passes `canAccessComplaint`.
+- All input is validated with zod. Pagination is capped at 50.
+- State-changing API requests must come from the same origin; Server Actions have Next.js's built-in origin check.
+- Rate limits on login, registration, upload, submit, tracking and geocoding.
+- Passwords: bcrypt (cost 12), minimum 10 characters. Login errors are generic; registration does not reveal whether an email exists.
+- Security headers and a Content Security Policy are set in `next.config.js`.
+
+## Known limitations
+
+- **Next.js 14 is past its support window.** We stayed on 14.2.x (latest patch) because upgrading two major versions a day before the deadline was too risky. `npm audit` reports known advisories against Next.js 14 and some dev tools. A real deployment should upgrade.
+- The rate limiter is in memory, so on serverless hosting the limit is per server instance.
+- The CSP allows inline scripts (`'unsafe-inline'`), which Next.js needs without nonces.
+- Photos are stored in a *public* Blob store: anyone who has the long random URL can view a photo.
+- EXIF can be edited or absent, so metadata checks are hints. EXIF times have no timezone and are read in the server's timezone.
+- dHash recognises resized or recompressed copies, not crops, rotations or heavy edits.
+- Duplicate text similarity is word overlap: the same problem described in English and in Hinglish will not match on text.
+- No email verification, password reset, SMS or real notifications.
+- The evaluation set is small and synthetic (see above).
+
+Future work is listed in `docs/REPORT.md`.
