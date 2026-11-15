@@ -1,124 +1,67 @@
-import { prisma } from '@/lib/db/prisma';
+// Routing: which department gets the complaint, and which officer in it.
+import type { Prisma } from '@prisma/client';
+import { OPEN_STATUSES } from './config';
+import { containsPhrase, normalize } from './text';
 
-export interface RoutingResult {
-  departmentId: string | null;
-  departmentCode: string | null;
-  departmentName: string | null;
-  assignedOfficerId: string | null;
-  assignedOfficerName: string | null;
-  routingRationale: string;
+export interface RoutingRuleInput {
+  keywords: string; // comma-separated
+  departmentId: string;
+  departmentName: string;
 }
 
-export async function routeGrievance(
-  categoryId?: string | null,
-  recommendedDepartmentCode?: string | null,
-  textDescription?: string
-): Promise<RoutingResult> {
-  let targetDepartment: { id: string; code: string; name: string } | null = null;
-  let ruleRationale = 'Routed using default civic category mapping';
+export interface DepartmentChoice {
+  departmentId: string | null;
+  reason: string;
+}
 
-  // 1. Check custom routing rules matching keywords in description if available
-  if (textDescription) {
-    const activeRules = await prisma.routingRule.findMany({
-      where: { active: true },
-      include: { department: true },
-    });
-
-    const lowerText = textDescription.toLowerCase();
-    for (const rule of activeRules) {
-      const keywords = rule.keywords.split(',').map((k) => k.trim().toLowerCase());
-      const hasMatch = keywords.some((kw) => kw.length > 2 && lowerText.includes(kw));
-      if (hasMatch) {
-        targetDepartment = rule.department;
-        ruleRationale = `Matched automated routing rule: "${rule.keywords}" -> ${rule.department.name}`;
-        break;
-      }
+/**
+ * Order of precedence:
+ * 1. admin routing rules (first rule with a whole-word keyword match wins)
+ * 2. the default department of the complaint's category
+ * 3. the default department of the category suggested by the analysis
+ */
+export function chooseDepartment(input: {
+  text: string;
+  rules: RoutingRuleInput[];
+  categoryDepartment: { id: string; name: string } | null;
+  suggestedDepartment: { id: string; name: string } | null;
+}): DepartmentChoice {
+  const text = normalize(input.text);
+  for (const rule of input.rules) {
+    const hit = rule.keywords.split(',').find((keyword) => containsPhrase(text, keyword));
+    if (hit) {
+      return { departmentId: rule.departmentId, reason: `Admin routing rule matched "${hit.trim()}": sent to ${rule.departmentName}.` };
     }
   }
-
-  // 2. If no rule hit, match by category's default department
-  if (!targetDepartment && categoryId) {
-    const category = await prisma.complaintCategory.findUnique({
-      where: { id: categoryId },
-      include: { defaultDepartment: true },
-    });
-
-    if (category?.defaultDepartment) {
-      targetDepartment = category.defaultDepartment;
-      ruleRationale = `Routed via category "${category.name}" to ${category.defaultDepartment.name}`;
-    }
+  if (input.categoryDepartment) {
+    return { departmentId: input.categoryDepartment.id, reason: `Default department for the category: ${input.categoryDepartment.name}.` };
   }
-
-  // 3. Fallback to AI-recommended department code (e.g. "PWD", "WATER", "ELEC", "HEALTH")
-  if (!targetDepartment && recommendedDepartmentCode) {
-    const dept = await prisma.department.findUnique({
-      where: { code: recommendedDepartmentCode },
-    });
-    if (dept) {
-      targetDepartment = dept;
-      ruleRationale = `Routed via AI classification code "${recommendedDepartmentCode}" to ${dept.name}`;
-    }
+  if (input.suggestedDepartment) {
+    return { departmentId: input.suggestedDepartment.id, reason: `Department suggested by the analysis: ${input.suggestedDepartment.name}.` };
   }
+  return { departmentId: null, reason: 'No department could be determined.' };
+}
 
-  // 4. Default fallback to first active department
-  if (!targetDepartment) {
-    const firstDept = await prisma.department.findFirst({
-      orderBy: { code: 'asc' },
-    });
-    if (firstDept) {
-      targetDepartment = firstDept;
-      ruleRationale = 'Default civic triage assigned to general administration queue';
-    }
-  }
+export interface OfficerLoad {
+  id: string;
+  employeeId: string;
+  openCases: number;
+}
 
-  if (!targetDepartment) {
-    return {
-      departmentId: null,
-      departmentCode: null,
-      departmentName: null,
-      assignedOfficerId: null,
-      assignedOfficerName: null,
-      routingRationale: 'No department available in system',
-    };
-  }
+/** Fewest open cases wins; ties go to the lower employee id so the result is predictable. */
+export function chooseOfficer(officers: OfficerLoad[]): OfficerLoad | null {
+  if (officers.length === 0) return null;
+  return [...officers].sort((a, b) => a.openCases - b.openCases || a.employeeId.localeCompare(b.employeeId))[0];
+}
 
-  // 5. Workload balancing: Find active officers in this department and pick the one with least open tickets
-  const officers = await prisma.officerProfile.findMany({
-    where: {
-      departmentId: targetDepartment.id,
-      active: true,
-    },
-    include: {
-      user: { select: { name: true } },
-      complaintsAssigned: {
-        where: {
-          status: { in: ['ASSIGNED', 'IN_PROGRESS', 'UNDER_REVIEW'] },
-        },
-        select: { id: true },
-      },
+export async function loadOfficerWorkloads(db: Prisma.TransactionClient, departmentId: string): Promise<OfficerLoad[]> {
+  const officers = await db.officerProfile.findMany({
+    where: { departmentId, active: true, user: { active: true } },
+    select: {
+      id: true,
+      employeeId: true,
+      _count: { select: { complaintsAssigned: { where: { status: { in: [...OPEN_STATUSES] } } } } },
     },
   });
-
-  let assignedOfficerId: string | null = null;
-  let assignedOfficerName: string | null = null;
-
-  if (officers.length > 0) {
-    // Sort ascending by open ticket workload
-    officers.sort((a, b) => a.complaintsAssigned.length - b.complaintsAssigned.length);
-    const chosen = officers[0];
-    assignedOfficerId = chosen.id;
-    assignedOfficerName = chosen.user.name;
-    ruleRationale += ` | Assigned to Officer ${chosen.user.name} (Workload: ${chosen.complaintsAssigned.length} active cases)`;
-  } else {
-    ruleRationale += ' | No individual officer assigned; queued for Department Head review';
-  }
-
-  return {
-    departmentId: targetDepartment.id,
-    departmentCode: targetDepartment.code,
-    departmentName: targetDepartment.name,
-    assignedOfficerId,
-    assignedOfficerName,
-    routingRationale: ruleRationale,
-  };
+  return officers.map((o) => ({ id: o.id, employeeId: o.employeeId, openCases: o._count.complaintsAssigned }));
 }

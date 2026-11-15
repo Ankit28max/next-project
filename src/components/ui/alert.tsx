@@ -1,37 +1,21 @@
-import * as React from 'react';
+import { AlertTriangle, CheckCircle2, Info, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { AlertCircle, AlertTriangle, CheckCircle, Info } from 'lucide-react';
 
-export interface AlertProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: 'info' | 'success' | 'warning' | 'danger';
-  title?: string;
-}
+const STYLES = {
+  info: { box: 'border-brand-200 bg-brand-50 text-brand-900', Icon: Info },
+  success: { box: 'border-emerald-300 bg-emerald-50 text-emerald-900', Icon: CheckCircle2 },
+  warning: { box: 'border-amber-300 bg-amber-50 text-amber-900', Icon: AlertTriangle },
+  error: { box: 'border-red-300 bg-red-50 text-red-900', Icon: XCircle },
+};
 
-export function Alert({ variant = 'info', title, children, className, ...props }: AlertProps) {
-  const styles = {
-    info: 'bg-blue-50 border-blue-200 text-blue-900',
-    success: 'bg-emerald-50 border-emerald-200 text-emerald-900',
-    warning: 'bg-amber-50 border-amber-200 text-amber-900',
-    danger: 'bg-rose-50 border-rose-200 text-rose-900',
-  };
-
-  const icons = {
-    info: <Info className="h-5 w-5 text-blue-600 flex-shrink-0" />,
-    success: <CheckCircle className="h-5 w-5 text-emerald-600 flex-shrink-0" />,
-    warning: <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0" />,
-    danger: <AlertCircle className="h-5 w-5 text-rose-600 flex-shrink-0" />,
-  };
-
+export function Alert({ variant = 'info', title, children, className }: { variant?: keyof typeof STYLES; title?: string; children?: React.ReactNode; className?: string }) {
+  const { box, Icon } = STYLES[variant];
   return (
-    <div
-      role="alert"
-      className={cn('flex items-start gap-3 p-4 rounded-xl border text-sm', styles[variant], className)}
-      {...props}
-    >
-      {icons[variant]}
-      <div className="flex-1 space-y-1">
-        {title && <h5 className="font-semibold leading-tight">{title}</h5>}
-        <div className="text-slate-700 leading-relaxed">{children}</div>
+    <div role={variant === 'error' ? 'alert' : 'status'} className={cn('flex gap-3 rounded-lg border p-4 text-sm', box, className)}>
+      <Icon className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
+      <div className="min-w-0 leading-relaxed">
+        {title && <p className="font-semibold">{title}</p>}
+        {children}
       </div>
     </div>
   );

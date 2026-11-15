@@ -1,27 +1,29 @@
-import { redirect } from 'next/navigation';
-import { getSessionUser } from '@/lib/auth/session';
-import { OfficerNav } from '@/components/layout/OfficerNav';
+import { prisma } from '@/lib/db/prisma';
+import { requireRolePage } from '@/lib/auth/session';
+import { AreaNav } from '@/components/layout/AreaNav';
+import { Alert } from '@/components/ui/alert';
 
-export default async function OfficerLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const user = await getSessionUser();
-
-  if (!user) {
-    redirect('/login');
-  }
-
-  // Officer workspace accessible by OFFICER and ADMIN roles
-  if (user.role !== 'OFFICER' && user.role !== 'ADMIN') {
-    redirect('/citizen');
-  }
-
+export default async function OfficerLayout({ children }: { children: React.ReactNode }) {
+  const user = await requireRolePage('OFFICER');
+  const unread = await prisma.notification.count({ where: { userId: user.id, readAt: null } });
   return (
-    <div className="min-h-screen bg-slate-100/70">
-      <OfficerNav />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">{children}</div>
-    </div>
+    <>
+      <AreaNav
+        title={user.officer?.departmentName ?? 'Officer'}
+        items={[
+          { href: '/officer', label: 'Overview' },
+          { href: '/officer/complaints', label: 'Complaint queue' },
+          { href: '/officer/notifications', label: 'Notifications', badge: unread },
+        ]}
+      />
+      <div className="page">
+        {!user.officer && (
+          <Alert variant="warning" title="No active department" className="mb-6">
+            Your officer profile is not active, so no complaints are visible. Please contact an administrator.
+          </Alert>
+        )}
+        {children}
+      </div>
+    </>
   );
 }

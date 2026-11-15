@@ -1,110 +1,41 @@
-import { AIClassificationResult, Priority } from '@/types';
+// Rule-based classifier: always available, needs no network. It counts keyword hits.
+import { CATEGORIES, OTHER_CATEGORY, URGENT_PHRASES, type Severity } from './categories';
+import { containsPhrase, normalize } from './text';
 
-interface CategoryKeywordRule {
+export interface RuleClassification {
   categoryCode: string;
-  categoryName: string;
-  departmentCode: string;
-  keywords: string[];
-  suggestedPriority: Priority;
-  baseConfidence: number;
+  /** Sum of the weights of the matched keywords. A match strength, NOT a probability. */
+  matchStrength: number;
+  matchedKeywords: string[];
+  severity: Severity;
+  reasons: string[];
 }
 
-const CATEGORY_RULES: CategoryKeywordRule[] = [
-  {
-    categoryCode: 'ROADS',
-    categoryName: 'Roads & Potholes',
-    departmentCode: 'PWD',
-    keywords: ['pothole', 'road', 'asphalt', 'crater', 'highway', 'street damage', 'pavement', 'tar', 'crack in road', 'traffic barrier'],
-    suggestedPriority: 'HIGH',
-    baseConfidence: 0.92,
-  },
-  {
-    categoryCode: 'WATER_SUPPLY',
-    categoryName: 'Water Supply & Leakage',
-    departmentCode: 'WATER',
-    keywords: ['water leak', 'pipe burst', 'no water', 'contaminated water', 'pipeline', 'water pressure', 'supply disruption', 'meter leak', 'tap'],
-    suggestedPriority: 'HIGH',
-    baseConfidence: 0.94,
-  },
-  {
-    categoryCode: 'SANITATION',
-    categoryName: 'Sanitation & Garbage',
-    departmentCode: 'HEALTH',
-    keywords: ['garbage', 'trash', 'waste', 'dump', 'dustbin', 'litter', 'filth', 'stagnant smell', 'cleanliness', 'debris', 'dead animal'],
-    suggestedPriority: 'MEDIUM',
-    baseConfidence: 0.89,
-  },
-  {
-    categoryCode: 'LIGHTING',
-    categoryName: 'Streetlights & Electricity',
-    departmentCode: 'ELEC',
-    keywords: ['streetlight', 'electric pole', 'sparking wire', 'power cut', 'dark street', 'transformer', 'hanging cable', 'light bulb', 'blackout'],
-    suggestedPriority: 'MEDIUM',
-    baseConfidence: 0.91,
-  },
-  {
-    categoryCode: 'DRAINAGE',
-    categoryName: 'Drainage & Sewage',
-    departmentCode: 'WATER',
-    keywords: ['drain', 'sewer', 'manhole', 'overflowing drain', 'gutters', 'waterlogging', 'flooding', 'sewage', 'clogged drain'],
-    suggestedPriority: 'HIGH',
-    baseConfidence: 0.93,
-  },
-  {
-    categoryCode: 'PUBLIC_DAMAGE',
-    categoryName: 'Public Property Damage',
-    departmentCode: 'PWD',
-    keywords: ['broken bench', 'vandalism', 'damaged park', 'fence broken', 'footpath damaged', 'public toilet damage', 'signboard down', 'bus stop'],
-    suggestedPriority: 'MEDIUM',
-    baseConfidence: 0.86,
-  },
-];
+export function classifyByRules(title: string, description: string): RuleClassification {
+  const text = normalize(`${title} ${description}`);
 
-export function classifyComplaintDeterministic(
-  title: string,
-  description: string
-): AIClassificationResult {
-  const content = `${title} ${description}`.toLowerCase();
-
-  let bestMatch: CategoryKeywordRule | null = null;
-  let maxKeywordHits = 0;
-
-  for (const rule of CATEGORY_RULES) {
-    let hits = 0;
-    for (const kw of rule.keywords) {
-      if (content.includes(kw)) {
-        hits += 1;
-      }
-    }
-    if (hits > maxKeywordHits) {
-      maxKeywordHits = hits;
-      bestMatch = rule;
+  let best = { code: OTHER_CATEGORY.code, name: OTHER_CATEGORY.name, score: 0, matched: [] as string[], severity: OTHER_CATEGORY.defaultSeverity };
+  for (const category of CATEGORIES) {
+    const matched = Object.keys(category.keywords).filter((keyword) => containsPhrase(text, keyword));
+    const score = matched.reduce((sum, keyword) => sum + category.keywords[keyword], 0);
+    // Strictly greater: on a tie the category listed first in CATEGORIES is kept.
+    if (score > best.score) {
+      best = { code: category.code, name: category.name, score, matched, severity: category.defaultSeverity };
     }
   }
 
-  // Check for urgency signals in text
-  const urgencyKeywords = ['urgent', 'emergency', 'danger', 'hazard', 'sparking', 'burst', 'accident', 'overflowing', 'critical'];
-  const hasUrgency = urgencyKeywords.some((w) => content.includes(w));
+  const urgentWords = URGENT_PHRASES.filter((phrase) => containsPhrase(text, phrase));
+  const reasons =
+    best.score > 0
+      ? [`Keywords for "${best.name}": ${best.matched.join(', ')}`]
+      : ['No category keywords found, so it was filed under "Other Civic Issue".'];
+  if (urgentWords.length > 0) reasons.push(`Urgency words: ${urgentWords.join(', ')}`);
 
-  if (bestMatch && maxKeywordHits > 0) {
-    const confidence = Math.min(0.98, bestMatch.baseConfidence + maxKeywordHits * 0.02);
-    const priority: Priority = hasUrgency ? 'URGENT' : bestMatch.suggestedPriority;
-
-    return {
-      predictedCategory: bestMatch.categoryName,
-      confidence: Math.round(confidence * 100) / 100,
-      recommendedDepartmentCode: bestMatch.departmentCode,
-      suggestedPriority: priority,
-      explanation: `Identified civic context matching "${bestMatch.categoryName}" based on linguistic markers (${maxKeywordHits} direct indicators found). Recommended routing to ${bestMatch.departmentCode}.`,
-    };
-  }
-
-  // Fallback for general civic issues
   return {
-    predictedCategory: 'Other Civic Issues',
-    confidence: 0.72,
-    recommendedDepartmentCode: 'PWD',
-    suggestedPriority: hasUrgency ? 'HIGH' : 'MEDIUM',
-    explanation: 'General civic complaint with broad phrasing. Routed to general Public Works for initial assessment.',
+    categoryCode: best.code,
+    matchStrength: best.score,
+    matchedKeywords: best.matched,
+    severity: urgentWords.length > 0 ? 'URGENT' : best.severity,
+    reasons,
   };
 }

@@ -1,86 +1,70 @@
-import jwt from 'jsonwebtoken';
+import { cache } from 'react';
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/db/prisma';
-import { AuthUser, Role } from '@/types';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'academic-demo-jwt-secret-key-super-secure-min-32-chars-2026';
-export const AUTH_COOKIE_NAME = 'grievance_session_token';
-
-export interface TokenPayload {
-  userId: string;
-  email: string;
-  role: Role;
-  name: string;
-}
-
-export function signSessionToken(payload: TokenPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
-}
-
-export function verifySessionToken(token: string): TokenPayload | null {
-  try {
-    return jwt.verify(token, JWT_SECRET) as TokenPayload;
-  } catch (error) {
-    return null;
-  }
-}
+import { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, homePathForRole, signSessionToken, verifySessionToken, type Role } from './token';
+import { assertRole, type SessionUser } from './guards';
 
 /**
- * Retrieves the currently authenticated user from the request cookie session
+ * Reads the session cookie, verifies the JWT, then loads the user from the database.
+ * The database lookup on every request means a deactivated account stops working immediately.
+ * `cache` makes repeated calls within one request hit the database only once.
  */
-export async function getSessionUser(): Promise<AuthUser | null> {
-  try {
-    const cookieStore = cookies();
-    const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-    if (!token) return null;
+export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
+  const token = await verifySessionToken(cookies().get(SESSION_COOKIE)?.value);
+  if (!token) return null;
 
-    const decoded = verifySessionToken(token);
-    if (!decoded || !decoded.userId) return null;
-
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        phone: true,
-        officerProfile: {
-          select: {
-            id: true,
-            departmentId: true,
-            employeeId: true,
-            department: {
-              select: {
-                id: true,
-                code: true,
-                name: true,
-              },
-            },
-          },
-        },
+  const user = await prisma.user.findUnique({
+    where: { id: token.userId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      active: true,
+      officerProfile: {
+        select: { id: true, active: true, departmentId: true, department: { select: { name: true } } },
       },
-    });
+    },
+  });
+  if (!user || !user.active) return null;
 
-    if (!user) return null;
-    return user as AuthUser;
-  } catch (err) {
-    return null;
-  }
+  const profile = user.officerProfile;
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    officer:
+      user.role === 'OFFICER' && profile?.active
+        ? { id: profile.id, departmentId: profile.departmentId, departmentName: profile.department.name }
+        : null,
+  };
+});
+
+/** For API routes and Server Actions: throws HttpError 401/403. */
+export async function requireRole(...allowed: Role[]): Promise<SessionUser> {
+  return assertRole(await getSessionUser(), allowed);
 }
 
-/**
- * Server-side guard to strictly enforce role-based access
- */
-export async function requireAuth(allowedRoles?: Role[]): Promise<AuthUser> {
+/** For pages and layouts: redirects instead of throwing. */
+export async function requireRolePage(...allowed: Role[]): Promise<SessionUser> {
   const user = await getSessionUser();
-  if (!user) {
-    throw new Error('UNAUTHORIZED: Authentication required to access this resource');
-  }
-
-  if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
-    throw new Error(`FORBIDDEN: Access denied for role ${user.role}`);
-  }
-
+  if (!user) redirect('/login');
+  if (!allowed.includes(user.role)) redirect(homePathForRole(user.role));
   return user;
+}
+
+export async function startSession(userId: string, role: Role): Promise<void> {
+  cookies().set(SESSION_COOKIE, await signSessionToken({ userId, role }), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: SESSION_MAX_AGE_SECONDS,
+  });
+}
+
+export function endSession(): void {
+  cookies().delete(SESSION_COOKIE);
 }
