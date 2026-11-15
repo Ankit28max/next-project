@@ -1,107 +1,42 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db/prisma';
 import { verifyPassword } from '@/lib/auth/password';
-import { AUTH_COOKIE_NAME, signSessionToken } from '@/lib/auth/session';
-import { logAuditEvent } from '@/lib/audit';
+import { startSession } from '@/lib/auth/session';
+import { homePathForRole } from '@/lib/auth/token';
+import { HttpError } from '@/lib/auth/guards';
+import { api, clientIp, enforceRateLimit } from '@/lib/http';
+import { rateLimit } from '@/lib/rate-limit';
+import { logAudit } from '@/lib/audit';
 
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(1, 'Password is required'),
+  email: z.string().trim().toLowerCase().email('Enter a valid email address.').max(200),
+  password: z.string().min(1, 'Enter your password.').max(200),
 });
 
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const result = loginSchema.safeParse(body);
+const WINDOW_MS = 5 * 60 * 1000;
 
-    if (!result.success) {
-      return NextResponse.json(
-        { success: false, error: result.error.errors[0].message },
-        { status: 400 }
-      );
-    }
-
-    const { email, password } = result.data;
-
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() },
-      include: {
-        officerProfile: {
-          include: { department: true },
-        },
-      },
-    });
-
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid email or password' },
-        { status: 401 }
-      );
-    }
-
-    const isMatch = await verifyPassword(password, user.passwordHash);
-    if (!isMatch) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid email or password' },
-        { status: 401 }
-      );
-    }
-
-    // Generate JWT Session Token
-    const token = signSessionToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      name: user.name,
-    });
-
-    // Log Audit Event
-    const ip = req.headers.get('x-forwarded-for') || req.ip;
-    await logAuditEvent({
-      actorId: user.id,
-      action: 'USER_LOGIN',
-      entityType: 'User',
-      entityId: user.id,
-      metadata: { role: user.role, email: user.email },
-      ipAddress: ip,
-    });
-
-    // Role-based target redirect
-    let redirectUrl = '/citizen';
-    if (user.role === 'ADMIN') redirectUrl = '/admin';
-    if (user.role === 'OFFICER') redirectUrl = '/officer';
-
-    const response = NextResponse.json({
-      success: true,
-      message: 'Login successful',
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        officerProfile: user.officerProfile,
-      },
-      redirectUrl,
-    });
-
-    // Set HTTP-only secure cookie
-    response.cookies.set({
-      name: AUTH_COOKIE_NAME,
-      value: token,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60, // 7 days
-    });
-
-    return response;
-  } catch (error: any) {
-    console.error('Login error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal server authentication error' },
-      { status: 500 }
-    );
+export const POST = api(async (req) => {
+  enforceRateLimit(req, 'login-ip', 20, WINDOW_MS);
+  const { email, password } = loginSchema.parse(await req.json());
+  if (!rateLimit(`login-email:${email}`, 8, WINDOW_MS)) {
+    throw new HttpError(429, 'Too many attempts for this account. Please wait a few minutes.');
   }
-}
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, role: true, active: true, passwordHash: true },
+  });
+
+  // One generic message for "unknown email", "wrong password" and "deactivated".
+  const passwordOk = await verifyPassword(password, user?.passwordHash);
+  if (!user || !passwordOk || !user.active) {
+    console.warn(`Failed login for ${email} from ${clientIp(req)}`);
+    await logAudit({ actorId: user?.id ?? null, action: 'LOGIN_FAILED', entityType: 'User', metadata: { email } });
+    throw new HttpError(401, 'Incorrect email or password.');
+  }
+
+  await startSession(user.id, user.role);
+  await logAudit({ actorId: user.id, action: 'LOGIN', entityType: 'User', entityId: user.id });
+  return NextResponse.json({ redirectTo: homePathForRole(user.role) });
+});

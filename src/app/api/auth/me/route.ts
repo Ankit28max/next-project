@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getSessionUser } from '@/lib/auth/session';
+import { requireRole } from '@/lib/auth/session';
+import { api } from '@/lib/http';
 
-export async function GET() {
-  const user = await getSessionUser();
-  if (!user) {
-    return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
-  }
+export const dynamic = 'force-dynamic';
 
-  return NextResponse.json({ success: true, user });
-}
+export const GET = api(async () => {
+  const user = await requireRole('CITIZEN', 'OFFICER', 'ADMIN');
+  return NextResponse.json({ user });
+});
