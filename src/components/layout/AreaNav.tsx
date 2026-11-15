@@ -18,7 +18,7 @@ export function AreaNav({ title, items }: { title: string; items: AreaNavItem[] 
     <div className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-page items-center gap-4 px-4 sm:px-6">
         <span className="hidden shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-500 md:block">{title}</span>
-        <nav aria-label={title} className="-mb-px flex gap-1 overflow-x-auto">
+        <nav aria-label={title} className="-mb-px flex min-w-0 gap-1 overflow-x-auto">
           {items.map((item) => {
             const active = item.href === root ? pathname === root : pathname.startsWith(item.href);
             return (

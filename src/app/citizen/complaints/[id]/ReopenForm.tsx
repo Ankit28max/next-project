@@ -11,7 +11,7 @@ export function ReopenForm({ complaintId }: { complaintId: string }) {
   const [state, formAction] = useFormState(reopenAction, null);
   return (
     <form action={formAction} className="space-y-4">
-      {state && <Alert variant={state.ok ? 'success' : 'error'}>{state.message}</Alert>}
+      {state && !state.ok && <Alert variant="error">{state.message}</Alert>}
       <input type="hidden" name="complaintId" value={complaintId} />
       <Textarea
         label="Why should this complaint be reopened?"

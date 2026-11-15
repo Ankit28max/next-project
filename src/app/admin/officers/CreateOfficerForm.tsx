@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
 import { useFormState } from 'react-dom';
 import { createOfficerAction } from '@/actions/admin';
 import { Alert } from '@/components/ui/alert';
@@ -9,14 +8,10 @@ import { SubmitButton } from '@/components/ui/submit-button';
 
 export function CreateOfficerForm({ departments }: { departments: { id: string; name: string }[] }) {
   const [state, formAction] = useFormState(createOfficerAction, null);
-  const form = useRef<HTMLFormElement>(null);
-  useEffect(() => {
-    if (state?.ok) form.current?.reset();
-  }, [state]);
 
   return (
-    <form ref={form} action={formAction} className="space-y-4">
-      {state && <Alert variant={state.ok ? 'success' : 'error'}>{state.message}</Alert>}
+    <form action={formAction} className="space-y-4">
+      {state && !state.ok && <Alert variant="error">{state.message}</Alert>}
       <Input label="Full name" name="name" required minLength={2} maxLength={100} />
       <Input label="Email" name="email" type="email" required autoComplete="off" />
       <Input label="Employee id" name="employeeId" required maxLength={30} />

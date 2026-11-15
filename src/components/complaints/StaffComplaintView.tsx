@@ -11,6 +11,7 @@ import { DUPLICATE, FRAUD } from '@/lib/ai/config';
 import { distanceMeters } from '@/lib/geo';
 import { formatDate, formatDistance } from '@/lib/utils';
 import { Alert } from '@/components/ui/alert';
+import { Notice } from '@/components/ui/notice';
 import { PriorityBadge, RiskBadge, StatusBadge } from '@/components/ui/badges';
 import { Card, CardTitle } from '@/components/ui/card';
 import { ComplaintMapLazy } from '@/components/maps/ComplaintMapLazy';
@@ -24,7 +25,7 @@ function asStrings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
 }
 
-export async function StaffComplaintView({ id, user, basePath, children }: { id: string; user: SessionUser; basePath: string; children?: React.ReactNode }) {
+export async function StaffComplaintView({ id, user, basePath, notice, children }: { id: string; user: SessionUser; basePath: string; notice?: string; children?: React.ReactNode }) {
   const complaint = await prisma.complaint.findUnique({
     where: { id },
     select: {
@@ -71,6 +72,8 @@ export async function StaffComplaintView({ id, user, basePath, children }: { id:
         <ArrowLeft className="h-4 w-4" aria-hidden />
         Back to the list
       </Link>
+
+      <Notice code={notice} />
 
       <header>
         <p className="font-mono text-sm font-semibold text-slate-600">{complaint.referenceNumber}</p>

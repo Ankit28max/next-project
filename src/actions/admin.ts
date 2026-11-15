@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { prisma } from '@/lib/db/prisma';
 import { getSessionUser } from '@/lib/auth/session';
@@ -23,7 +24,7 @@ const officerSchema = z.object({
 });
 
 export async function createOfficerAction(_prev: ActionState, form: FormData): Promise<ActionState> {
-  return runAction('Officer account created.', async () => {
+  const state = await runAction('', async () => {
     const admin = await requireAdmin();
     const input = officerSchema.parse(Object.fromEntries(form));
 
@@ -50,6 +51,8 @@ export async function createOfficerAction(_prev: ActionState, form: FormData): P
     });
     revalidatePath('/admin/officers');
   });
+  if (state?.ok) redirect('/admin/officers?notice=officer-created');
+  return state;
 }
 
 const setActiveSchema = z.object({ officerId: z.string().min(1).max(40), active: z.enum(['true', 'false']) });
@@ -68,6 +71,7 @@ export async function setOfficerActiveAction(form: FormData): Promise<void> {
     data: { actorId: admin.id, action: active ? 'OFFICER_ACTIVATED' : 'OFFICER_DEACTIVATED', entityType: 'User', entityId: profile.userId },
   });
   revalidatePath('/admin/officers');
+  redirect('/admin/officers?notice=officer-updated');
 }
 
 const ruleSchema = z.object({
@@ -85,7 +89,7 @@ const ruleSchema = z.object({
 
 /** Creates a routing rule, or updates it when the form contains a ruleId. */
 export async function saveRoutingRuleAction(_prev: ActionState, form: FormData): Promise<ActionState> {
-  return runAction('Routing rule saved.', async () => {
+  const state = await runAction('', async () => {
     const admin = await requireAdmin();
     const { ruleId, ...data } = ruleSchema.parse(Object.fromEntries(form));
     const department = await prisma.department.findUnique({ where: { id: data.departmentId }, select: { id: true } });
@@ -99,6 +103,8 @@ export async function saveRoutingRuleAction(_prev: ActionState, form: FormData):
     });
     revalidatePath('/admin/routing');
   });
+  if (state?.ok) redirect('/admin/routing?notice=rule-saved');
+  return state;
 }
 
 const toggleRuleSchema = z.object({ ruleId: z.string().min(1).max(40), active: z.enum(['true', 'false']) });
@@ -111,12 +117,15 @@ export async function setRoutingRuleActiveAction(form: FormData): Promise<void> 
     data: { actorId: admin.id, action: 'ROUTING_RULE_TOGGLED', entityType: 'RoutingRule', entityId: input.ruleId, metadata: { active: input.active } },
   });
   revalidatePath('/admin/routing');
+  redirect('/admin/routing?notice=rule-updated');
 }
 
 export async function reassignAction(_prev: ActionState, form: FormData): Promise<ActionState> {
-  return runAction('Complaint reassigned.', async () => {
+  const state = await runAction('', async () => {
     const raw = Object.fromEntries(form);
     await reassignComplaint(await getSessionUser(), { ...raw, officerId: raw.officerId || undefined });
-    revalidatePath('/admin', 'layout');
+    revalidatePath('/', 'layout');
   });
+  if (state?.ok) redirect(`/admin/complaints/${encodeURIComponent(String(form.get('complaintId')))}?notice=reassigned`);
+  return state;
 }

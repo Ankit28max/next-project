@@ -5,6 +5,7 @@
 
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { ZodError } from 'zod';
 import { getSessionUser } from '@/lib/auth/session';
 import { HttpError, assertRole } from '@/lib/auth/guards';
@@ -31,25 +32,39 @@ export async function submitComplaintAction(input: unknown): Promise<{ ok: true;
   }
 }
 
+/** Where a staff member views a complaint. Built on the server, never taken from the form. */
+async function staffComplaintPath(form: FormData): Promise<string> {
+  const user = await getSessionUser();
+  const area = user?.role === 'ADMIN' ? 'admin' : 'officer';
+  return `/${area}/complaints/${encodeURIComponent(String(form.get('complaintId')))}`;
+}
+
+// Pattern used by the actions below (Post/Redirect/Get):
+// - on failure, return a message that the form shows through useFormState
+// - on success, redirect back to the page with ?notice=<code>; the page renders the confirmation
 export async function updateStatusAction(_prev: ActionState, form: FormData): Promise<ActionState> {
-  return runAction('Status updated. The citizen has been notified.', async () => {
+  const state = await runAction('', async () => {
     await updateStatus(await getSessionUser(), Object.fromEntries(form));
-    revalidatePath('/officer', 'layout');
-    revalidatePath('/admin', 'layout');
+    revalidatePath('/', 'layout');
   });
+  if (state?.ok) redirect(`${await staffComplaintPath(form)}?notice=status-updated`);
+  return state;
 }
 
 export async function addNoteAction(_prev: ActionState, form: FormData): Promise<ActionState> {
-  return runAction('Internal note saved.', async () => {
+  const state = await runAction('', async () => {
     await addInternalNote(await getSessionUser(), Object.fromEntries(form));
-    revalidatePath('/officer', 'layout');
-    revalidatePath('/admin', 'layout');
+    revalidatePath('/', 'layout');
   });
+  if (state?.ok) redirect(`${await staffComplaintPath(form)}?notice=note-saved`);
+  return state;
 }
 
 export async function reopenAction(_prev: ActionState, form: FormData): Promise<ActionState> {
-  return runAction('Complaint reopened. The department has been notified.', async () => {
+  const state = await runAction('', async () => {
     await reopenComplaint(await getSessionUser(), Object.fromEntries(form));
-    revalidatePath('/citizen', 'layout');
+    revalidatePath('/', 'layout');
   });
+  if (state?.ok) redirect(`/citizen/complaints/${encodeURIComponent(String(form.get('complaintId')))}?notice=reopened`);
+  return state;
 }

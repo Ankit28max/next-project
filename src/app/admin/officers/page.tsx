@@ -4,6 +4,7 @@ import { setOfficerActiveAction } from '@/actions/admin';
 import { prisma } from '@/lib/db/prisma';
 import { requireRolePage } from '@/lib/auth/session';
 import { OPEN_STATUSES } from '@/lib/ai/config';
+import { Notice } from '@/components/ui/notice';
 import { Card, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SubmitButton } from '@/components/ui/submit-button';
@@ -11,7 +12,7 @@ import { CreateOfficerForm } from './CreateOfficerForm';
 
 export const metadata: Metadata = { title: 'Officers' };
 
-export default async function OfficersPage() {
+export default async function OfficersPage({ searchParams }: { searchParams: { notice?: string } }) {
   await requireRolePage('ADMIN');
   const [officers, departments] = await Promise.all([
     prisma.officerProfile.findMany({
@@ -29,6 +30,7 @@ export default async function OfficersPage() {
   return (
     <div className="space-y-6">
       <h1>Officers</h1>
+      <Notice code={searchParams.notice} />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           {officers.length === 0 ? (

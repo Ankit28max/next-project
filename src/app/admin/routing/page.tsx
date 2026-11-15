@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { setRoutingRuleActiveAction } from '@/actions/admin';
 import { prisma } from '@/lib/db/prisma';
 import { requireRolePage } from '@/lib/auth/session';
+import { Notice } from '@/components/ui/notice';
 import { Card, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SubmitButton } from '@/components/ui/submit-button';
@@ -9,7 +10,7 @@ import { RuleForm } from './RuleForm';
 
 export const metadata: Metadata = { title: 'Routing rules' };
 
-export default async function RoutingPage() {
+export default async function RoutingPage({ searchParams }: { searchParams: { notice?: string } }) {
   await requireRolePage('ADMIN');
   const [rules, departments] = await Promise.all([
     prisma.routingRule.findMany({
@@ -28,6 +29,7 @@ export default async function RoutingPage() {
           checked in order (lowest number first) before the category default. Changes apply to new complaints only.
         </p>
       </div>
+      <Notice code={searchParams.notice} />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           {rules.length === 0 ? (

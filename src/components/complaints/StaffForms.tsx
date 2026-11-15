@@ -13,16 +13,11 @@ import { STATUS_LABELS } from '@/components/ui/badges';
 export function StatusForm({ complaintId, allowedStatuses }: { complaintId: string; allowedStatuses: string[] }) {
   const [state, formAction] = useFormState(updateStatusAction, null);
   if (allowedStatuses.length === 0) {
-    return (
-      <div className="space-y-3">
-        {state?.ok && <Alert variant="success">{state.message}</Alert>}
-        <p className="text-sm text-slate-700">This complaint is closed. It can change again only if the citizen reopens it.</p>
-      </div>
-    );
+    return <p className="text-sm text-slate-700">This complaint is closed. It can change again only if the citizen reopens it.</p>;
   }
   return (
     <form action={formAction} className="space-y-4">
-      {state && <Alert variant={state.ok ? 'success' : 'error'}>{state.message}</Alert>}
+      {state && !state.ok && <Alert variant="error">{state.message}</Alert>}
       <input type="hidden" name="complaintId" value={complaintId} />
       <Select label="New status" name="status" required defaultValue="">
         <option value="" disabled>
@@ -44,7 +39,7 @@ export function NoteForm({ complaintId }: { complaintId: string }) {
   const [state, formAction] = useFormState(addNoteAction, null);
   return (
     <form action={formAction} className="space-y-4">
-      {state && <Alert variant={state.ok ? 'success' : 'error'}>{state.message}</Alert>}
+      {state && !state.ok && <Alert variant="error">{state.message}</Alert>}
       <input type="hidden" name="complaintId" value={complaintId} />
       <Textarea label="Internal note" hint="Only officers and administrators can read this." name="note" rows={2} required minLength={3} maxLength={2000} />
       <SubmitButton variant="secondary">Save note</SubmitButton>
@@ -66,7 +61,7 @@ export function ReassignForm({ complaintId, currentDepartmentId, departments, of
   const available = officers.filter((o) => o.departmentId === departmentId);
   return (
     <form action={formAction} className="space-y-4">
-      {state && <Alert variant={state.ok ? 'success' : 'error'}>{state.message}</Alert>}
+      {state && !state.ok && <Alert variant="error">{state.message}</Alert>}
       <input type="hidden" name="complaintId" value={complaintId} />
       <Select label="Department" name="departmentId" required value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
         <option value="" disabled>

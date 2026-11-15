@@ -8,7 +8,7 @@ import { ReassignForm } from '@/components/complaints/StaffForms';
 
 export const metadata: Metadata = { title: 'Complaint' };
 
-export default async function AdminComplaintPage({ params }: { params: { id: string } }) {
+export default async function AdminComplaintPage({ params, searchParams }: { params: { id: string }; searchParams: { notice?: string } }) {
   const user = await requireRolePage('ADMIN');
   const [complaint, departments, officers] = await Promise.all([
     prisma.complaint.findUnique({ where: { id: params.id }, select: { departmentId: true } }),
@@ -24,7 +24,7 @@ export default async function AdminComplaintPage({ params }: { params: { id: str
   ]);
 
   return (
-    <StaffComplaintView id={params.id} user={user} basePath="/admin/complaints">
+    <StaffComplaintView id={params.id} user={user} basePath="/admin/complaints" notice={searchParams.notice}>
       <Card>
         <CardTitle>Reassign (administrator)</CardTitle>
         <ReassignForm

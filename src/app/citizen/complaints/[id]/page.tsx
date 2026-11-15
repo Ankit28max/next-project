@@ -12,12 +12,13 @@ import { Card, CardTitle } from '@/components/ui/card';
 import { Photo } from '@/components/complaints/Photo';
 import { StatusTimeline } from '@/components/complaints/StatusTimeline';
 import { ComplaintMapLazy } from '@/components/maps/ComplaintMapLazy';
+import { Notice } from '@/components/ui/notice';
 import { ReopenForm } from './ReopenForm';
 import { SubmittedCard } from './SubmittedCard';
 
 export const metadata: Metadata = { title: 'Complaint' };
 
-export default async function CitizenComplaintPage({ params, searchParams }: { params: { id: string }; searchParams: { submitted?: string } }) {
+export default async function CitizenComplaintPage({ params, searchParams }: { params: { id: string }; searchParams: { submitted?: string; notice?: string } }) {
   const user = await requireRolePage('CITIZEN');
   const complaint = await prisma.complaint.findUnique({
     where: { id: params.id },
@@ -47,6 +48,8 @@ export default async function CitizenComplaintPage({ params, searchParams }: { p
         <ArrowLeft className="h-4 w-4" aria-hidden />
         My complaints
       </Link>
+
+      <Notice code={searchParams.notice} />
 
       {searchParams.submitted && (
         <SubmittedCard

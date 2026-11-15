@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
 import { useFormState } from 'react-dom';
 import { saveRoutingRuleAction } from '@/actions/admin';
 import { Alert } from '@/components/ui/alert';
@@ -17,14 +16,10 @@ interface Rule {
 /** Used both to add a rule (no `rule` prop) and to edit an existing one. */
 export function RuleForm({ departments, rule }: { departments: { id: string; name: string }[]; rule?: Rule }) {
   const [state, formAction] = useFormState(saveRoutingRuleAction, null);
-  const form = useRef<HTMLFormElement>(null);
-  useEffect(() => {
-    if (state?.ok && !rule) form.current?.reset();
-  }, [state, rule]);
 
   return (
-    <form ref={form} action={formAction} className="space-y-4">
-      {state && <Alert variant={state.ok ? 'success' : 'error'}>{state.message}</Alert>}
+    <form action={formAction} className="space-y-4">
+      {state && !state.ok && <Alert variant="error">{state.message}</Alert>}
       {rule && <input type="hidden" name="ruleId" value={rule.id} />}
       <Input label="Keywords" hint="Separate with commas, for example: school, hospital" name="keywords" defaultValue={rule?.keywords} required maxLength={300} />
       <Select label="Send to department" name="departmentId" required defaultValue={rule?.departmentId ?? ''}>
