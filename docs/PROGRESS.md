@@ -61,3 +61,13 @@ Verified locally (production build, local Docker Postgres, local-disk storage):
 - `npm run eval` (rules only): numbers recorded in README.
 
 Unverified so far: anything on Vercel / Neon / Vercel Blob; the Gemini call (no key yet); pushing to GitHub (SSH key and `gh` login are not working on this machine).
+
+## Sun 17:20 - browser run (headless Chrome against the local production build)
+
+Verified in a real browser: wizard validation on every step, "Use my location", server-side geocoding, photo upload with preview, consent unchecked by default, submit -> result screen with reference number (now its own URL: `/citizen/complaints/[id]?submitted=1`), officer sees the complaint.
+
+**Open bug (not fixed yet):** after an officer's "Update status" Server Action the status DOES change in the database and the page refreshes, but the green confirmation message from `useFormState` disappears (the form is remounted by the refresh after `revalidatePath`). Removing `officer/loading.tsx` did not help. Same risk for "Save note", "Reopen", admin forms. Next step: find the remount cause or show confirmation another way (for example redirect with a `?updated=1` flag, like the submit result).
+
+Not yet run in the browser: reopen, mark-as-read, admin create/deactivate officer, routing rule, reassign, responsive screenshots (script is ready in the session scratchpad, not in the repo).
+
+Still to do: README, docs/REPORT.md, docs/VIVA.md, docs/DEMO_SCRIPT.md, Lighthouse, Gemini verification (needs key), push + Vercel/Neon/Blob deploy (needs working GitHub auth), production seed.

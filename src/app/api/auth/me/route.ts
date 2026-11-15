@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { requireRole } from '@/lib/auth/session';
-import { api } from '@/lib/http';
+import { getSessionUser } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
-export const GET = api(async () => {
-  const user = await requireRole('CITIZEN', 'OFFICER', 'ADMIN');
-  return NextResponse.json({ user });
-});
+/** Used by the header to decide which links to show. Returns { user: null } when signed out. */
+export async function GET() {
+  const user = await getSessionUser();
+  return NextResponse.json({ user: user ? { name: user.name, role: user.role } : null });
+}

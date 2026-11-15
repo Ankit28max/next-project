@@ -13,7 +13,12 @@ import { STATUS_LABELS } from '@/components/ui/badges';
 export function StatusForm({ complaintId, allowedStatuses }: { complaintId: string; allowedStatuses: string[] }) {
   const [state, formAction] = useFormState(updateStatusAction, null);
   if (allowedStatuses.length === 0) {
-    return <p className="text-sm text-slate-700">This complaint is closed. It can change again only if the citizen reopens it.</p>;
+    return (
+      <div className="space-y-3">
+        {state?.ok && <Alert variant="success">{state.message}</Alert>}
+        <p className="text-sm text-slate-700">This complaint is closed. It can change again only if the citizen reopens it.</p>
+      </div>
+    );
   }
   return (
     <form action={formAction} className="space-y-4">

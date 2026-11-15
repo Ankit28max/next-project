@@ -3,13 +3,13 @@
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
-import { CheckCircle2, ImagePlus, Trash2 } from 'lucide-react';
+import { ImagePlus, Trash2 } from 'lucide-react';
 import { submitComplaintAction } from '@/actions/complaints';
-import type { SubmitResult } from '@/lib/complaints/submit';
 import { resizeForUpload } from '@/lib/images/client-resize';
 import { Alert } from '@/components/ui/alert';
-import { Button, buttonClass } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input, Select, Textarea } from '@/components/ui/field';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -30,6 +30,7 @@ interface UploadedPhoto {
 }
 
 export function SubmitWizard({ categories }: { categories: { id: string; name: string }[] }) {
+  const router = useRouter();
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +47,6 @@ export function SubmitWizard({ categories }: { categories: { id: string; name: s
   const [lookingUp, setLookingUp] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<SubmitResult | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -130,12 +130,14 @@ export function SubmitWizard({ categories }: { categories: { id: string; name: s
       consentGiven: consent,
       imageId: photo?.imageId,
     });
-    setSubmitting(false);
-    if (response.ok) setResult(response.result);
-    else setError(response.message);
+    if (response.ok) {
+      // The result screen is its own URL, so it survives a refresh and can be bookmarked.
+      router.replace(`/citizen/complaints/${response.result.id}?submitted=1`);
+    } else {
+      setSubmitting(false);
+      setError(response.message);
+    }
   }
-
-  if (result) return <ResultScreen result={result} />;
 
   return (
     <div className="mt-6 space-y-6">
@@ -303,54 +305,5 @@ export function SubmitWizard({ categories }: { categories: { id: string; name: s
         )}
       </div>
     </div>
-  );
-}
-
-function ResultScreen({ result }: { result: SubmitResult }) {
-  return (
-    <Card className="mt-6 text-center">
-      <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" aria-hidden />
-      <h2 className="mt-3 text-xl" role="status">
-        Complaint submitted
-      </h2>
-      <p className="mt-4 text-sm text-slate-600">Your reference number</p>
-      <p className="mt-1 inline-block rounded-lg border-2 border-dashed border-brand-300 bg-brand-50 px-5 py-3 font-mono text-2xl font-bold tracking-wide text-brand-900">
-        {result.referenceNumber}
-      </p>
-      <p className="mt-2 text-sm text-slate-600">Keep it. Anyone with this number can check the status on the Track page.</p>
-
-      <dl className="mx-auto mt-6 grid max-w-md grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-left text-sm">
-        <dt className="text-slate-600">Category</dt>
-        <dd className="font-medium">{result.categoryName ?? 'To be decided by staff'}</dd>
-        <dt className="text-slate-600">Sent to</dt>
-        <dd className="font-medium">{result.departmentName ?? 'Waiting for manual assignment'}</dd>
-        <dt className="text-slate-600">Analysed by</dt>
-        <dd className="font-medium">
-          {result.analysedBy === 'gemini' && 'Vision model and keyword rules'}
-          {result.analysedBy === 'rules' && 'Keyword rules (vision model not used)'}
-          {result.analysedBy === 'none' && 'Not analysed automatically'}
-        </dd>
-      </dl>
-
-      {result.similarComplaints > 0 && (
-        <Alert variant="info" className="mt-5 text-left">
-          Similar complaints were already reported nearby. Yours is still registered; an officer will look at them together.
-        </Alert>
-      )}
-      {result.needsManualTriage && (
-        <Alert variant="warning" className="mt-5 text-left">
-          The automatic sorting could not be completed, so a staff member will assign your complaint by hand.
-        </Alert>
-      )}
-
-      <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <Link href={`/citizen/complaints/${result.id}`} className={buttonClass('primary')}>
-          View complaint
-        </Link>
-        <Link href="/citizen" className={buttonClass('secondary')}>
-          Back to dashboard
-        </Link>
-      </div>
-    </Card>
   );
 }

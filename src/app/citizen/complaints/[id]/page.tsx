@@ -13,10 +13,11 @@ import { Photo } from '@/components/complaints/Photo';
 import { StatusTimeline } from '@/components/complaints/StatusTimeline';
 import { ComplaintMapLazy } from '@/components/maps/ComplaintMapLazy';
 import { ReopenForm } from './ReopenForm';
+import { SubmittedCard } from './SubmittedCard';
 
 export const metadata: Metadata = { title: 'Complaint' };
 
-export default async function CitizenComplaintPage({ params }: { params: { id: string } }) {
+export default async function CitizenComplaintPage({ params, searchParams }: { params: { id: string }; searchParams: { submitted?: string } }) {
   const user = await requireRolePage('CITIZEN');
   const complaint = await prisma.complaint.findUnique({
     where: { id: params.id },
@@ -24,7 +25,9 @@ export default async function CitizenComplaintPage({ params }: { params: { id: s
     select: {
       id: true, referenceNumber: true, citizenId: true, departmentId: true, title: true, description: true,
       address: true, latitude: true, longitude: true, status: true, priority: true, createdAt: true,
-      resolutionSummary: true, resolvedAt: true,
+      resolutionSummary: true, resolvedAt: true, needsManualTriage: true,
+      analyses: { select: { provider: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+      _count: { select: { matchesAsSource: true } },
       category: { select: { name: true } },
       department: { select: { name: true } },
       images: { select: { storageUrl: true }, take: 1 },
@@ -44,6 +47,17 @@ export default async function CitizenComplaintPage({ params }: { params: { id: s
         <ArrowLeft className="h-4 w-4" aria-hidden />
         My complaints
       </Link>
+
+      {searchParams.submitted && (
+        <SubmittedCard
+          referenceNumber={complaint.referenceNumber}
+          categoryName={complaint.category?.name ?? null}
+          departmentName={complaint.department?.name ?? null}
+          analysedBy={complaint.analyses[0]?.provider ?? 'none'}
+          similarComplaints={complaint._count.matchesAsSource}
+          needsManualTriage={complaint.needsManualTriage}
+        />
+      )}
 
       <header>
         <p className="font-mono text-sm font-semibold text-slate-600">{complaint.referenceNumber}</p>
