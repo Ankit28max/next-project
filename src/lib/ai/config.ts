@@ -42,7 +42,7 @@ export const FRAUD = {
 
 export const GEMINI = {
   TIMEOUT_MS: 10_000,
-  DEFAULT_MODEL: 'gemini-2.5-flash',
+  DEFAULT_MODEL: 'gemini-3.5-flash-lite',
 } as const;
 
 /** Statuses that count as "open work" for an officer's workload. */
